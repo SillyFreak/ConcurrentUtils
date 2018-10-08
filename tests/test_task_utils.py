@@ -14,23 +14,24 @@ async def test_pipe():
 
 
 @pytest.mark.asyncio
-async def test_component_start_returns():
+async def test_component_start_return():
     async def component(x, *, commands, events):
+        # return before START
         return x
 
     comp = Component(component, 1)
     with pytest.raises(Component.LifecycleError) as exc_info:
         await comp.start()
-
     result, = exc_info.value.__cause__.args
     assert result == 1
 
 
 @pytest.mark.asyncio
-async def test_component_start_raises():
+async def test_component_start_raise():
     class Fail(Exception): pass
 
     async def component(x, *, commands, events):
+        # raise before START
         raise Fail
 
     comp = Component(component, 1)
@@ -42,10 +43,14 @@ async def test_component_start_raises():
 async def test_component_result_success():
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # return
         return x
 
     comp = Component(component, 1)
     await comp.start()
+
     assert await comp.result() == 1
 
 
@@ -55,25 +60,40 @@ async def test_component_result_exception():
 
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # raise
         raise Fail
 
     comp = Component(component, 1)
     await comp.start()
+
     with pytest.raises(Fail):
         await comp.result()
 
 
 @pytest.mark.asyncio
 async def test_component_result_event():
+    EVENT = 'EVENT'
+
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
-        events.send_nowait('EVENT')
+        ### startup complete
+
+        # send event
+        events.send_nowait(EVENT)
+
+        # return
         return x
 
     comp = Component(component, 1)
     await comp.start()
-    with pytest.raises(Component.EventException):
+
+    with pytest.raises(Component.EventException) as exc_info:
         await comp.result()
+    event, = exc_info.value.args
+    assert event == EVENT
+
     assert await comp.result() == 1
 
 
@@ -81,12 +101,16 @@ async def test_component_result_event():
 async def test_component_stop_success():
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # receive STOP and return
         command = await commands.recv()
         assert command == Component.COMMAND_STOP
         return x
 
     comp = Component(component, 1)
     await comp.start()
+
     assert await comp.stop() == 1
 
 
@@ -96,27 +120,46 @@ async def test_component_stop_exception():
 
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # receive STOP and raise
         command = await commands.recv()
         assert command == Component.COMMAND_STOP
         raise Fail
 
     comp = Component(component, 1)
     await comp.start()
+
     with pytest.raises(Fail):
         await comp.stop()
 
 
 @pytest.mark.asyncio
 async def test_component_stop_event():
+    EVENT = 'EVENT'
+
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
-        events.send_nowait('EVENT')
+        ### startup complete
+
+        # receive STOP and send EVENT
+        command = await commands.recv()
+        assert command == Component.COMMAND_STOP
+        events.send_nowait(EVENT)
+
+        # receive STOP and send return
+        command = await commands.recv()
+        assert command == Component.COMMAND_STOP
         return x
 
     comp = Component(component, 1)
     await comp.start()
-    with pytest.raises(Component.EventException):
+
+    with pytest.raises(Component.EventException) as exc_info:
         await comp.stop()
+    event, = exc_info.value.args
+    assert event == EVENT
+
     assert await comp.stop() == 1
 
 
@@ -126,12 +169,19 @@ async def test_component_recv_event():
 
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # send event
         events.send_nowait(EVENT)
+
+        # return
         return x
 
     comp = Component(component, 1)
     await comp.start()
+
     assert await comp.recv_event() == EVENT
+
     assert await comp.result() == 1
 
 
@@ -139,13 +189,16 @@ async def test_component_recv_event():
 async def test_component_recv_event_return():
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # return
         return x
 
     comp = Component(component, 1)
     await comp.start()
+
     with pytest.raises(Component.Success) as exc_info:
         await comp.recv_event()
-
     result, = exc_info.value.args
     assert result == 1
 
@@ -156,13 +209,16 @@ async def test_component_recv_event_raise():
 
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # raise
         raise Fail
 
     comp = Component(component, 1)
     await comp.start()
+
     with pytest.raises(Component.Failure) as exc_info:
         await comp.recv_event()
-
     fail, = exc_info.value.args
     with pytest.raises(Fail):
         raise fail
