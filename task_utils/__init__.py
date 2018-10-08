@@ -62,15 +62,6 @@ def pipe(maxsize=0):
     return Pipe(a, b), Pipe(b, a)
 
 
-class LifecycleError(Exception): pass
-class Success(Exception): pass
-class Failure(Exception): pass
-class EventException(Exception): pass
-
-EVENT_START = 'EVENT_START'
-COMMAND_STOP = 'COMMAND_STOP'
-
-
 class Component:
     """\
     A task extended with pipes for communication and a lifecycle.
@@ -79,10 +70,18 @@ class Component:
     `commands` is for caller-initiated communication; `events` for task-initiated communication.
 
     There are two lifecycle requirements to the passed coroutine function:
-    - when the task starts, `EVENT_START` needs to be sent; and
-    - when `COMMAND_STOP` is received, the task should prepare for teardown. If the task refuses to stop,
-      it needs to send an event of its choice, otherwise it must terminate.
+    - when the task starts, `Component.EVENT_START` needs to be sent; and
+    - when `Component.COMMAND_STOP` is received, the task should prepare for teardown.
+      If the task refuses to stop, it needs to send an event of its choice, otherwise it must terminate.
     """
+
+    class LifecycleError(Exception): pass
+    class Success(Exception): pass
+    class Failure(Exception): pass
+    class EventException(Exception): pass
+
+    EVENT_START = 'EVENT_START'
+    COMMAND_STOP = 'COMMAND_STOP'
 
     def __init__(self, coro_func, *args, **kwargs):
         self._commands, commands = pipe()
@@ -94,35 +93,35 @@ class Component:
         try:
             result = await coro_func(*args, commands=commands, events=events, **kwargs)
         except Exception as err:
-            raise Failure(err) from None
+            raise Component.Failure(err) from None
         else:
-            raise Success(result)
+            raise Component.Success(result)
         finally:
             events.send_nowait(eof=True)
 
     async def start(self):
         """\
-        Start the component; waits for `EVENT_START` and raises `LifecycleError` if the task completes without it,
+        Start the component; waits for `Component.EVENT_START` and raises `LifecycleError` if the task completes without it,
         or sends a different event first.
         """
         self.task = asyncio.create_task(self._coro_func())
         try:
             start_event = await self.recv_event()
-        except Success as succ:
-            raise LifecycleError(f"component returned before start finished") from succ
-        except Failure as fail:
+        except Component.Success as succ:
+            raise Component.LifecycleError(f"component returned before start finished") from succ
+        except Component.Failure as fail:
             # here we don't expect a wrapped result, so we unwrap the failure
             cause, = fail.args
             raise cause from None
         else:
-            if start_event != EVENT_START:
-                raise LifecycleError(f"Component must emit EVENT_START, was {start_event}")
+            if start_event != Component.EVENT_START:
+                raise Component.LifecycleError(f"Component must emit EVENT_START, was {start_event}")
 
     async def stop(self):
         """\
-        Stop the component; sends `COMMAND_STOP` and returns `result()`.
+        Stop the component; sends `Component.COMMAND_STOP` and returns `result()`.
         """
-        self.send(COMMAND_STOP)
+        self.send(Component.COMMAND_STOP)
         return await self.result()
 
     async def result(self):
@@ -133,17 +132,17 @@ class Component:
         """
         try:
             event = await self.recv_event()
-        except Success as succ:
+        except Component.Success as succ:
             # success was thrown; return the result
             result, = succ.args
             return result
-        except Failure as fail:
+        except Component.Failure as fail:
             # here we don't expect a wrapped result, so we unwrap the failure
             cause, = fail.args
             raise cause
         else:
             # there was a regular event; shouldn't happen/is exceptional
-            raise EventException(event)
+            raise Component.EventException(event)
 
     def send(self, value):
         """\
