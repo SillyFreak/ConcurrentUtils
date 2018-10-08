@@ -1,4 +1,5 @@
 import asyncio
+import asyncio.locks
 
 
 class EOFError(Exception): pass
@@ -8,46 +9,70 @@ def pipe(maxsize=0):
     """\
     A bidirectional pipe of Python objects.
 
-    >>> a, b = pipe()
-    >>> a.send_nowait('foo')
-    >>> asyncio.run(b.recv())
-    'foo'
-    >>> asyncio.run(b.send(eof=True))
-    >>> asyncio.run(a.recv())
+    >>> async def example1():
+    ...     a, b = pipe()
+    ...     a.send_nowait('foo')
+    ...     print(await b.recv())
+    >>> asyncio.run(example1())
+    foo
+    >>> async def example2():
+    ...     a, b = pipe()
+    ...     await b.send(eof=True)
+    ...     await a.recv()
+    >>> asyncio.run(example2())
     Traceback (most recent call last):
       ...
     task_utils.EOFError
     """
 
     _none = object()
-    EOF = object()
+
+    class QueueStream:
+        def __init__(self, maxsize=0):
+            self.queue = asyncio.Queue(maxsize)
+            self.eof = asyncio.locks.Event()
 
     class Pipe:
         def __init__(self, send, recv):
             self._send = send
             self._recv = recv
 
-        def send_nowait(self, value=EOF, *, eof=False):
-            if value is EOF and not eof:
+        def send_nowait(self, value=_none, *, eof=False):
+            if value is _none and not eof:
                 raise ValueError("Missing value or EOF")
-            if value is not EOF and eof:
+            if value is not _none and eof:
                 raise ValueError("value and EOF are mutually exclusive")
 
-            self._send.put_nowait(value)
+            if eof:
+                self._send.eof.set()
+            else:
+                self._send.queue.put_nowait(value)
 
-        async def send(self, value=EOF, *, eof=False):
-            if value is EOF and not eof:
+        async def send(self, value=_none, *, eof=False):
+            if value is _none and not eof:
                 raise ValueError("Missing value or EOF")
-            if value is not EOF and eof:
+            if value is not _none and eof:
                 raise ValueError("value and EOF are mutually exclusive")
 
-            await self._send.put(value)
+            if eof:
+                self._send.eof.set()
+            else:
+                await self._send.queue.put(value)
 
         async def recv(self):
-            result = await self._recv.get()
-            if result is EOF:
+            get = asyncio.create_task(self._recv.queue.get())
+            eof = asyncio.create_task(self._recv.eof.wait())
+
+            done, pending = await asyncio.wait([get, eof], return_when=asyncio.FIRST_COMPLETED)
+
+            # cancel get or eof, whichever is not finished
+            for task in pending:
+                task.cancel()
+
+            if get in done:
+                return get.result()
+            else:
                 raise EOFError
-            return result
 
         async def request_sendnowait(self, value):
             self.send_nowait(value)
@@ -58,7 +83,7 @@ def pipe(maxsize=0):
             return await self.recv()
 
 
-    a, b = asyncio.Queue(maxsize), asyncio.Queue(maxsize)
+    a, b = QueueStream(maxsize), QueueStream(maxsize)
     return Pipe(a, b), Pipe(b, a)
 
 

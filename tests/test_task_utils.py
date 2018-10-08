@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 
-from task_utils import pipe, Component
+from task_utils import pipe, EOFError, Component
 
 
 @pytest.mark.asyncio
@@ -10,8 +10,15 @@ async def test_pipe():
 
     a.send_nowait(1)
     assert await b.recv() == 1
+
     await b.send(2)
     assert await a.recv() == 2
+
+    a.send_nowait(eof=True)
+    with pytest.raises(EOFError):
+        assert await b.recv()
+    with pytest.raises(EOFError):
+        assert await b.recv()
 
 
 @pytest.mark.asyncio
