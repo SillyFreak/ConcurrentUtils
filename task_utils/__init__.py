@@ -101,8 +101,11 @@ class Component:
 
     async def start(self):
         """\
-        Start the component; waits for `Component.EVENT_START` and raises `LifecycleError` if the task completes without it,
-        or sends a different event first.
+        Start the component. This waits for `Component.EVENT_START` to be sent from the task.
+        If the task returns without an event, a `LifecycleError` is raised with a `Success` as its cause.
+        If the task raises an exception before any event, that exception is raised.
+        If the task sends a different event than `Component.EVENT_START`,
+        the task is cancelled and a `LifecycleError` is raised.
         """
         self.task = asyncio.create_task(self._coro_func())
         try:
@@ -115,6 +118,7 @@ class Component:
             raise cause from None
         else:
             if start_event != Component.EVENT_START:
+                self.task.cancel()
                 raise Component.LifecycleError(f"Component must emit EVENT_START, was {start_event}")
 
     async def stop(self):
@@ -126,9 +130,8 @@ class Component:
 
     async def result(self):
         """\
-        Wait for the task's termination; either the result is returned or a raise exception is reraised.
-        If an event is sent before the task terminates, a recoverable `EventException` is raised
-        with the event as argument.
+        Wait for the task's termination; either the result is returned or a raised exception is reraised.
+        If an event is sent before the task terminates, an `EventException` is raised with the event as argument.
         """
         try:
             event = await self.recv_event()
@@ -166,7 +169,8 @@ class Component:
         """\
         Receives an event from the task.
         If the task terminates before another event, an exception is raised.
-        A normal return is wrapped in a `Success` exception, other exceptions are simply raised.
+        A normal return is wrapped in a `Success` exception,
+        other exceptions result in a `Failure` with the original exception as the cause.
         """
         try:
             return await self._events.recv()
@@ -177,4 +181,7 @@ class Component:
             assert False, f"EOF sent to event queue manually"
 
     def send_event_reply(self, value):
+        """\
+        Sends a reply for an event received from the task.
+        """
         self._events.send_nowait(value)
