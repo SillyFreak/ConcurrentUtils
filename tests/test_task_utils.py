@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 
 from task_utils import pipe, Component
 
@@ -37,6 +38,35 @@ async def test_component_start_raise():
     comp = Component(component, 1)
     with pytest.raises(Fail) as exc_info:
         await comp.start()
+
+
+@pytest.mark.asyncio
+async def test_component_start_event():
+    EVENT = 'EVENT'
+
+    flag = False
+
+    async def component(x, *, commands, events):
+        nonlocal flag
+
+        # send WRONG event
+        events.send_nowait(EVENT)
+        await asyncio.sleep(0.05)
+        flag = True
+
+
+    comp = Component(component, 1)
+    with pytest.raises(Component.LifecycleError):
+        await comp.start()
+
+    await asyncio.sleep(0.1)
+    assert not flag
+
+    with pytest.raises(Component.Failure) as exc_info:
+        await comp.task
+    exc, = exc_info.value.args
+    with pytest.raises(asyncio.CancelledError):
+        raise exc
 
 
 @pytest.mark.asyncio
