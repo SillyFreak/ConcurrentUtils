@@ -110,11 +110,12 @@ class Component:
     The coroutine passed to Component is required to show the following behavior:
     - it must send `Component.EVENT_START` to its owner after the task is initialized;
     - it must not send EOF on the event pipe;
-    - when `Component.COMMAND_STOP` is received, it must either stop eventually, or send an event to its owner;
-    - when the task is cancelled, it must either stop eventually, or send an event to its owner.
+    - when `Component.COMMAND_STOP` is received, it should either stop eventually, or send an event to its owner;
+    - when the task is cancelled, it should either stop eventually, or send an event to its owner.
 
-    The latter two only rule out the Component running forever
-    without responding to stop/cancellation requests with an event.
+    The latter two are soft requirements and only rule out the Component running forever
+    without ever sending an event after a stop/cancellation request.
+    A component may choose to ignore stop commands or cancellations, but should document if it does.
     """
 
     class LifecycleError(Exception): pass
@@ -147,7 +148,7 @@ class Component:
         If the task returns without an event, a `LifecycleError` is raised with a `Success` as its cause.
         If the task raises an exception before any event, that exception is raised.
         If the task sends a different event than `Component.EVENT_START`,
-        the task is cancelled and a `LifecycleError` is raised.
+        the task is cancelled (without waiting for the task to shut down) and a `LifecycleError` is raised.
         """
         self.task = asyncio.create_task(self._coro_func())
         try:
@@ -163,19 +164,34 @@ class Component:
                 self.task.cancel()
                 raise Component.LifecycleError(f"Component must emit EVENT_START, was {start_event}")
 
-    async def stop(self):
+    def stop_nowait(self):
         """\
-        Stop the component; sends `Component.COMMAND_STOP` and returns `result()`.
+        Stop the component; sends `Component.COMMAND_STOP` to the task.
+        Stopping requires the component to receive the command and actively comply with it.
+        It is a clean method of shutdown, but requires active cooperation.
         """
         self.send(Component.COMMAND_STOP)
+
+    async def stop(self):
+        """\
+        Stop the component; calls `stop_nowait()` and returns `result()`.
+        """
+        self.stop_nowait()
         return await self.result()
+
+    def cancel_nowait(self):
+        """\
+        Cancel the component.
+        Cancelling raises a `CancelledError` into the task, which will normally terminate it.
+        It is a forced method of shutdown, and only requires the component to not actively ignore cancellations.
+        """
+        self.task.cancel()
 
     async def cancel(self):
         """\
-        Cancel the component; cancels the component and returns `result()`,
-        which may or may not raise a `CancelledError`.
+        Cancel the component; calls `cancel_nowait()` and returns `result()`.
         """
-        self.task.cancel()
+        self.cancel_nowait()
         return await self.result()
 
     async def result(self):
