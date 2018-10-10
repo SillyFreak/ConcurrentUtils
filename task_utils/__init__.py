@@ -42,6 +42,8 @@ def pipe(maxsize=0):
                 raise ValueError("Missing value or EOF")
             if value is not _none and eof:
                 raise ValueError("value and EOF are mutually exclusive")
+            if self._send.eof.is_set():
+                raise EOFError("Cannot send after EOF")
 
         def send_nowait(self, value=_none, *, eof=False):
             self._check_send(value, eof=eof)

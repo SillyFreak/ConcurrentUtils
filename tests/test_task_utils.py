@@ -16,6 +16,8 @@ async def test_pipe():
 
     a.send_nowait(eof=True)
     with pytest.raises(EOFError):
+        a.send_nowait('foo')
+    with pytest.raises(EOFError):
         assert await b.recv()
     with pytest.raises(EOFError):
         assert await b.recv()
