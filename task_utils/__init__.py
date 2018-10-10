@@ -99,15 +99,22 @@ def pipe(maxsize=0):
 
 class Component:
     """\
-    A task extended with pipes for communication and a lifecycle.
+    A component encapsulates a task with pipes that allow for communication with the task's owner.
     Pass a coroutine function and arguments to Component;
     upon `start()` the coroutine function will be started as a task with two additional pipe arguments:
-    `commands` is for caller-initiated communication; `events` for task-initiated communication.
+    `commands` is for owner-initiated communication; `events` for task-initiated communication.
+    Replies to commands are sent task-to-owner on the command pipe,
+    and replies to events are sent owner-to-task on the event pipe;
+    the reserved event `Component.EVENT_START` and command `Component.COMMAND_STOP` do not expect a reply.
 
-    There are two lifecycle requirements to the passed coroutine function:
-    - when the task starts, `Component.EVENT_START` needs to be sent; and
-    - when `Component.COMMAND_STOP` is received, the task should prepare for teardown.
-      If the task refuses to stop, it needs to send an event of its choice, otherwise it must terminate.
+    The coroutine passed to Component is required to show the following behavior:
+    - it must send `Component.EVENT_START` to its owner after the task is initialized;
+    - it must not send EOF on the event pipe;
+    - when `Component.COMMAND_STOP` is received, it must either stop eventually, or send an event to its owner;
+    - when the task is cancelled, it must either stop eventually, or send an event to its owner.
+
+    The latter two only rule out the Component running forever
+    without responding to stop/cancellation requests with an event.
     """
 
     class LifecycleError(Exception): pass
@@ -161,6 +168,14 @@ class Component:
         Stop the component; sends `Component.COMMAND_STOP` and returns `result()`.
         """
         self.send(Component.COMMAND_STOP)
+        return await self.result()
+
+    async def cancel(self):
+        """\
+        Cancel the component; cancels the component and returns `result()`,
+        which may or may not raise a `CancelledError`.
+        """
+        self.task.cancel()
         return await self.result()
 
     async def result(self):

@@ -186,7 +186,7 @@ async def test_component_stop_event():
         assert command == Component.COMMAND_STOP
         events.send_nowait(EVENT)
 
-        # receive STOP and send return
+        # receive STOP and return
         command = await commands.recv()
         assert command == Component.COMMAND_STOP
         return x
@@ -200,6 +200,88 @@ async def test_component_stop_event():
     assert event == EVENT
 
     assert await comp.stop() == 1
+
+
+@pytest.mark.asyncio
+async def test_component_cancel_cancels():
+    async def component(x, *, commands, events):
+        events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # wait for cancellation
+        await asyncio.sleep(1)
+
+    comp = Component(component, 1)
+    await comp.start()
+
+    with pytest.raises(asyncio.CancelledError):
+        await comp.cancel()
+
+
+@pytest.mark.asyncio
+async def test_component_cancel_success():
+    async def component(x, *, commands, events):
+        events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # wait for cancellation and return
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.sleep(1)
+        return x
+
+    comp = Component(component, 1)
+    await comp.start()
+
+    assert await comp.cancel() == 1
+
+
+@pytest.mark.asyncio
+async def test_component_cancel_exception():
+    class Fail(Exception): pass
+
+    async def component(x, *, commands, events):
+        events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # wait for cancellation and raise
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.sleep(1)
+        raise Fail
+
+    comp = Component(component, 1)
+    await comp.start()
+
+    with pytest.raises(Fail):
+        await comp.cancel()
+
+
+@pytest.mark.asyncio
+async def test_component_cancel_event():
+    EVENT = 'EVENT'
+
+    async def component(x, *, commands, events):
+        events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        # wait for cancellation and send EVENT
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.sleep(1)
+        events.send_nowait(EVENT)
+
+        # wait for cancellation and return
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.sleep(1)
+        return x
+
+    comp = Component(component, 1)
+    await comp.start()
+
+    with pytest.raises(Component.EventException) as exc_info:
+        await comp.cancel()
+    event, = exc_info.value.args
+    assert event == EVENT
+
+    assert await comp.cancel() == 1
 
 
 @pytest.mark.asyncio
