@@ -29,41 +29,36 @@ def pipe(maxsize=0):
 
     class QueueStream:
         def __init__(self, maxsize=0):
-            self.queue = asyncio.Queue(maxsize)
-            self.eof = asyncio.locks.Event()
-
-    class Pipe:
-        def __init__(self, send, recv):
-            self._send = send
-            self._recv = recv
+            self._queue = asyncio.Queue(maxsize)
+            self._eof = asyncio.locks.Event()
 
         def _check_send(self, value=_none, *, eof=False):
             if value is _none and not eof:
                 raise ValueError("Missing value or EOF")
             if value is not _none and eof:
                 raise ValueError("value and EOF are mutually exclusive")
-            if self._send.eof.is_set():
+            if self._eof.is_set():
                 raise EOFError("Cannot send after EOF")
 
         def send_nowait(self, value=_none, *, eof=False):
             self._check_send(value, eof=eof)
 
             if eof:
-                self._send.eof.set()
+                self._eof.set()
             else:
-                self._send.queue.put_nowait(value)
+                self._queue.put_nowait(value)
 
         async def send(self, value=_none, *, eof=False):
             self._check_send(value, eof=eof)
 
             if eof:
-                self._send.eof.set()
+                self._eof.set()
             else:
-                await self._send.queue.put(value)
+                await self._queue.put(value)
 
         async def recv(self):
-            get = asyncio.create_task(self._recv.queue.get())
-            eof = asyncio.create_task(self._recv.eof.wait())
+            get = asyncio.create_task(self._queue.get())
+            eof = asyncio.create_task(self._eof.wait())
 
             done, pending = await asyncio.wait([get, eof], return_when=asyncio.FIRST_COMPLETED)
 
@@ -76,6 +71,20 @@ def pipe(maxsize=0):
             else:
                 raise EOFError
 
+    class Pipe:
+        def __init__(self, send, recv):
+            self._send = send
+            self._recv = recv
+
+        def send_nowait(self, value=_none, *, eof=False):
+            self._send.send_nowait(value, eof=eof)
+
+        async def send(self, value=_none, *, eof=False):
+            await self._send.send(value, eof=eof)
+
+        async def recv(self):
+            return await self._recv.recv()
+
         async def request_sendnowait(self, value):
             self.send_nowait(value)
             return await self.recv()
@@ -83,7 +92,6 @@ def pipe(maxsize=0):
         async def request(self, value):
             await self.send(value)
             return await self.recv()
-
 
     a, b = QueueStream(maxsize), QueueStream(maxsize)
     return Pipe(a, b), Pipe(b, a)
