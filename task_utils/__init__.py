@@ -37,11 +37,14 @@ def pipe(maxsize=0):
             self._send = send
             self._recv = recv
 
-        def send_nowait(self, value=_none, *, eof=False):
+        def _check_send(self, value=_none, *, eof=False):
             if value is _none and not eof:
                 raise ValueError("Missing value or EOF")
             if value is not _none and eof:
                 raise ValueError("value and EOF are mutually exclusive")
+
+        def send_nowait(self, value=_none, *, eof=False):
+            self._check_send(value, eof=eof)
 
             if eof:
                 self._send.eof.set()
@@ -49,10 +52,7 @@ def pipe(maxsize=0):
                 self._send.queue.put_nowait(value)
 
         async def send(self, value=_none, *, eof=False):
-            if value is _none and not eof:
-                raise ValueError("Missing value or EOF")
-            if value is not _none and eof:
-                raise ValueError("value and EOF are mutually exclusive")
+            self._check_send(value, eof=eof)
 
             if eof:
                 self._send.eof.set()
