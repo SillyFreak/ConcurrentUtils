@@ -8,11 +8,20 @@ from task_utils import pipe, EOFError, Component
 async def test_pipe():
     a, b = pipe()
 
-    a.send_nowait(1)
-    assert await b.recv() == 1
+    # send the reply in the background
+    async def reply():
+        b.send_nowait(await b.recv() + 1)
+        await b.send(await b.recv() + 1)
 
-    await b.send(2)
-    assert await a.recv() == 2
+    asyncio.create_task(reply())
+    assert await a.request_sendnowait(1) == 2
+    assert await a.request(2) == 3
+
+    with pytest.raises(ValueError):
+        await a.send(1, eof=True)
+
+    with pytest.raises(ValueError):
+        await a.send()
 
     a.send_nowait(eof=True)
     with pytest.raises(EOFError):
