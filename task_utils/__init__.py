@@ -3,6 +3,9 @@ import asyncio
 from .pipe import pipe
 
 
+__all__ = ['Component']
+
+
 class Component:
     """\
     A component encapsulates a task with pipes that allow for communication with the task's owner.

@@ -3,6 +3,9 @@ import asyncio
 import asyncio.locks
 
 
+__all__ = ['Pipe', 'pipe']
+
+
 class Pipe:
     _none = object()
 
