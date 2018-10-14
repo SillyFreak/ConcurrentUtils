@@ -160,7 +160,10 @@ class Component:
         else:
             raise Component.Success(result)
         finally:
-            events.send_nowait(eof=True)
+            try:
+                events.send_nowait(eof=True)
+            except EOFError as err:
+                raise Component.LifecycleError("component closed events pipe manually") from err
 
     async def start(self):
         """\
@@ -263,9 +266,9 @@ class Component:
             return await self._events.recv()
         except EOFError:
             # component has terminated, raise the cause
-            # either Success or a regular error
+            # either Success, Failure, or LifecycleError
             self.task.result()
-            assert False, f"EOF sent to event queue manually"
+            assert False  # pragma: nocover
 
     def send_event_reply(self, value):
         """\

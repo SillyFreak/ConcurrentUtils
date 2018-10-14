@@ -356,3 +356,24 @@ async def test_component_recv_event_raise():
     fail, = exc_info.value.args
     with pytest.raises(Fail):
         raise fail
+
+
+@pytest.mark.asyncio
+async def test_component_manual_eof_event():
+    async def component(x, *, commands, events):
+        events.send_nowait(Component.EVENT_START)
+        ### startup complete
+
+        events.send_nowait(eof=True)
+
+    comp = Component(component, 1)
+    await comp.start()
+
+    with pytest.raises(Component.LifecycleError):
+        await comp.recv_event()
+
+    with pytest.raises(Component.LifecycleError):
+        await comp.result()
+
+    with pytest.raises(Component.LifecycleError):
+        await comp.stop()
