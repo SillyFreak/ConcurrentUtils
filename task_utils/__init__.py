@@ -18,15 +18,15 @@ class Pipe:
 
     @abstractmethod
     def send_nowait(self, value=_none, *, eof=False):
-        raise NotImplemented
+        raise NotImplemented  # pragma: nocover
 
     @abstractmethod
     async def send(self, value=_none, *, eof=False):
-        raise NotImplemented
+        raise NotImplemented  # pragma: nocover
 
     @abstractmethod
     async def recv(self):
-        raise NotImplemented
+        raise NotImplemented  # pragma: nocover
 
     async def request_sendnowait(self, value):
         self.send_nowait(value)
