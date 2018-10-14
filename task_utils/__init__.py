@@ -1,12 +1,17 @@
+from typing import cast, Any, Awaitable, Callable, Generic, Optional, TypeVar
 import asyncio
 
-from .pipe import pipe
+from .pipe import pipe, PipeEnd
 
 
 __all__ = ['Component']
 
 
-class Component:
+T = TypeVar('T')
+CoroutineFunction = Callable[..., Awaitable[T]]
+
+
+class Component(Generic[T]):
     """\
     A component encapsulates a task with pipes that allow for communication with the task's owner.
     Pass a coroutine function and arguments to Component;
@@ -94,13 +99,14 @@ class Component:
     EVENT_START = 'EVENT_START'
     COMMAND_STOP = 'COMMAND_STOP'
 
-    def __init__(self, coro_func, *args, **kwargs):
+    def __init__(self, coro_func: CoroutineFunction, *args: Any, **kwargs: Any) -> None:
         self._commands, commands = pipe()
         self._events, events = pipe()
         self._coro_func = lambda: self._coro_wrapper(coro_func, *args, commands=commands, events=events, **kwargs)
-        self.task = None
+        self.task: Optional[asyncio.Task] = None
 
-    async def _coro_wrapper(self, coro_func, *args, commands, events, **kwargs):
+    async def _coro_wrapper(self, coro_func: CoroutineFunction,
+                            *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> None:
         try:
             result = await coro_func(*args, commands=commands, events=events, **kwargs)
         except Exception as err:
@@ -113,7 +119,7 @@ class Component:
             except EOFError as err:
                 raise Component.LifecycleError("component closed events pipe manually") from err
 
-    async def start(self):
+    async def start(self) -> None:
         """\
         Start the component. This waits for `Component.EVENT_START` to be sent from the task.
         If the task returns without an event, a `LifecycleError` is raised with a `Success` as its cause.
@@ -135,7 +141,7 @@ class Component:
                 self.task.cancel()
                 raise Component.LifecycleError(f"Component must emit EVENT_START, was {start_event}")
 
-    def stop_nowait(self):
+    def stop_nowait(self) -> None:
         """\
         Stop the component; sends `Component.COMMAND_STOP` to the task.
         Stopping requires the component to receive the command and actively comply with it.
@@ -143,29 +149,29 @@ class Component:
         """
         self.send(Component.COMMAND_STOP)
 
-    async def stop(self):
+    async def stop(self) -> T:
         """\
         Stop the component; calls `stop_nowait()` and returns `result()`.
         """
         self.stop_nowait()
         return await self.result()
 
-    def cancel_nowait(self):
+    def cancel_nowait(self) -> None:
         """\
         Cancel the component.
         Cancelling raises a `CancelledError` into the task, which will normally terminate it.
         It is a forced method of shutdown, and only requires the component to not actively ignore cancellations.
         """
-        self.task.cancel()
+        cast(asyncio.Task, self.task).cancel()
 
-    async def cancel(self):
+    async def cancel(self) -> T:
         """\
         Cancel the component; calls `cancel_nowait()` and returns `result()`.
         """
         self.cancel_nowait()
         return await self.result()
 
-    async def result(self):
+    async def result(self) -> T:
         """\
         Wait for the task's termination; either the result is returned or a raised exception is reraised.
         If an event is sent before the task terminates, an `EventException` is raised with the event as argument.
@@ -175,7 +181,7 @@ class Component:
         except Component.Success as succ:
             # success was thrown; return the result
             result, = succ.args
-            return result
+            return cast(T, result)
         except Component.Failure as fail:
             # here we don't expect a wrapped result, so we unwrap the failure
             cause, = fail.args
@@ -184,26 +190,26 @@ class Component:
             # there was a regular event; shouldn't happen/is exceptional
             raise Component.EventException(event)
 
-    def send(self, value):
+    def send(self, value: Any) -> None:
         """\
         Sends a command to the task.
         """
         self._commands.send_nowait(value)
 
-    async def recv(self):
+    async def recv(self) -> Any:
         """\
         Receives a command reply from the task.
         """
         return await self._commands.recv()
 
-    async def request(self, value):
+    async def request(self, value: Any) -> Any:
         """\
         Sends a command to and receives the reply from the task.
         """
         self.send(value)
         return await self.recv()
 
-    async def recv_event(self):
+    async def recv_event(self) -> Any:
         """\
         Receives an event from the task.
         If the task terminates before another event, an exception is raised.
@@ -215,10 +221,10 @@ class Component:
         except EOFError:
             # component has terminated, raise the cause
             # either Success, Failure, or LifecycleError
-            self.task.result()
+            cast(asyncio.Task, self.task).result()
             assert False  # pragma: nocover
 
-    def send_event_reply(self, value):
+    def send_event_reply(self, value: Any) -> None:
         """\
         Sends a reply for an event received from the task.
         """

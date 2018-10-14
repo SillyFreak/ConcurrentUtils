@@ -52,7 +52,7 @@ setup(
     # You can install these using the following syntax, for example:
     # $ pip install -e .[dev,test]
     extras_require={
-        'test': ['pytest', 'pytest-runner', 'pytest-asyncio', 'pytest-cov'],
+        'test': ['pytest', 'pytest-runner', 'pytest-asyncio', 'pytest-cov', 'mypy'],
     },
 
     # package_data={
