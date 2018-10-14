@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 
-from task_utils.pipe import pipe, EOFError
+from task_utils.pipe import pipe
 
 
 @pytest.mark.asyncio

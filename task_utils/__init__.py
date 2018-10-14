@@ -1,6 +1,6 @@
 import asyncio
 
-from .pipe import pipe, EOFError
+from .pipe import pipe
 
 
 class Component:

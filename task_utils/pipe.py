@@ -3,9 +3,6 @@ import asyncio
 import asyncio.locks
 
 
-class EOFError(Exception): pass
-
-
 class Pipe:
     _none = object()
 
@@ -54,7 +51,7 @@ def pipe(maxsize=0):
     >>> asyncio.run(example2())
     Traceback (most recent call last):
       ...
-    task_utils.pipe.EOFError
+    EOFError
     """
 
     class QueueStream:
