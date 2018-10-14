@@ -3,17 +3,17 @@ import asyncio
 import asyncio.locks
 
 
-__all__ = ['Pipe', 'pipe']
+__all__ = ['PipeEnd', 'pipe']
 
 
-class Pipe:
+class PipeEnd:
     _none = object()
 
     @staticmethod
     def check_send_args(value, *, eof):
-        if value is Pipe._none and not eof:
+        if value is PipeEnd._none and not eof:
             raise ValueError("Missing value or EOF")
-        if value is not Pipe._none and eof:
+        if value is not PipeEnd._none and eof:
             raise ValueError("value and EOF are mutually exclusive")
 
     @abstractmethod
@@ -65,7 +65,7 @@ def pipe(maxsize=0):
         def _check_send(self, value, *, eof):
             if self._eof.is_set():
                 raise EOFError("Cannot send after EOF")
-            Pipe.check_send_args(value, eof=eof)
+            PipeEnd.check_send_args(value, eof=eof)
 
         def send_nowait(self, value, *, eof):
             self._check_send(value, eof=eof)
@@ -98,20 +98,20 @@ def pipe(maxsize=0):
             else:
                 raise EOFError
 
-    class _Pipe(Pipe):
+    class _PipeEnd(PipeEnd):
         def __init__(self, send, recv):
             super().__init__()
             self._send = send
             self._recv = recv
 
-        def send_nowait(self, value=Pipe._none, *, eof=False):
+        def send_nowait(self, value=PipeEnd._none, *, eof=False):
             self._send.send_nowait(value, eof=eof)
 
-        async def send(self, value=Pipe._none, *, eof=False):
+        async def send(self, value=PipeEnd._none, *, eof=False):
             await self._send.send(value, eof=eof)
 
         async def recv(self):
             return await self._recv.recv()
 
     a, b = QueueStream(maxsize), QueueStream(maxsize)
-    return _Pipe(a, b), _Pipe(b, a)
+    return _PipeEnd(a, b), _PipeEnd(b, a)
