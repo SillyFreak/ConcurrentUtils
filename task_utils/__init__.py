@@ -249,7 +249,8 @@ class Component:
         """\
         Sends a command to and receives the reply from the task.
         """
-        return await self._commands.request(value)
+        self.send(value)
+        return await self.recv()
 
     async def recv_event(self):
         """\

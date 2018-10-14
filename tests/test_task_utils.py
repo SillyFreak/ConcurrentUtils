@@ -88,16 +88,21 @@ async def test_component_start_event():
 
 
 @pytest.mark.asyncio
-async def test_component_result_success():
+async def test_component_result_success_and_command():
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
+
+        # reply to command
+        commands.send_nowait(await commands.recv() + 1)
 
         # return
         return x
 
     comp = Component(component, 1)
     await comp.start()
+
+    assert await comp.request(1) == 2
 
     assert await comp.result() == 1
 
@@ -294,15 +299,13 @@ async def test_component_cancel_event():
 
 
 @pytest.mark.asyncio
-async def test_component_recv_event():
-    EVENT = 'EVENT'
-
+async def test_component_recv_event_and_reply():
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
 
         # send event
-        events.send_nowait(EVENT)
+        assert await events.request_sendnowait(1) == 2
 
         # return
         return x
@@ -310,7 +313,8 @@ async def test_component_recv_event():
     comp = Component(component, 1)
     await comp.start()
 
-    assert await comp.recv_event() == EVENT
+    assert await comp.recv_event() == 1
+    comp.send_event_reply(2)
 
     assert await comp.result() == 1
 
