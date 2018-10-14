@@ -22,6 +22,65 @@ class Component:
     The latter two are soft requirements and only rule out the Component running forever
     without ever sending an event after a stop/cancellation request.
     A component may choose to ignore stop commands or cancellations, but should document if it does.
+
+    A simple example. Note that here, the component is exclusively reacting to commands,
+    and the owner waits for acknowledgements to its commands, making the order of outputs predictable.
+
+    >>> async def component(msg, *, commands, events):
+    ...     # do any startup tasks here
+    ...     print("> component starting up...")
+    ...     events.send_nowait(Component.EVENT_START)
+    ...
+    ...     count = 0
+    ...     while True:
+    ...         command = await commands.recv()
+    ...         if command == Component.COMMAND_STOP:
+    ...             # honor stop commands
+    ...             break
+    ...         elif command == 'ECHO':
+    ...             print(f"> {msg}")
+    ...             count += 1
+    ...             # acknowledge the command was serviced completely
+    ...             commands.send_nowait(None)
+    ...         else:
+    ...             # unknown command; terminate
+    ...             # by closing the commands pipe,
+    ...             # the caller (if waiting for a reply) will receive an EOFError
+    ...             commands.send_nowait(eof=True)
+    ...             raise ValueError
+    ...
+    ...     # do any cleanup tasks here, probably in a finally block
+    ...     print("> component cleaning up...")
+    ...     return count
+    ...
+    >>> async def example():
+    ...     comp = Component(component, "Hello World")
+    ...
+    ...     print("call start")
+    ...     await comp.start()
+    ...     print("done")
+    ...
+    ...     print("send command")
+    ...     await comp.request('ECHO')
+    ...     print("done")
+    ...
+    ...     print("call stop")
+    ...     count = await comp.stop()
+    ...     print("done")
+    ...
+    ...     print(count)
+    ...
+    >>> asyncio.run(example())
+    call start
+    > component starting up...
+    done
+    send command
+    > Hello World
+    done
+    call stop
+    > component cleaning up...
+    done
+    1
     """
 
     class LifecycleError(Exception): pass
