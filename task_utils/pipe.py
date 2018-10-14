@@ -4,7 +4,7 @@ import asyncio
 import asyncio.locks
 
 
-__all__ = ['PipeEnd', 'pipe']
+__all__ = ['PipeEnd', 'Pipe', 'pipe']
 
 
 class PipeEnd:
@@ -38,7 +38,10 @@ class PipeEnd:
         return await self.recv()
 
 
-def pipe(maxsize=0) -> Tuple[PipeEnd, PipeEnd]:
+Pipe = Tuple[PipeEnd, PipeEnd]
+
+
+def pipe(maxsize=0) -> Pipe:
     """\
     A bidirectional pipe of Python objects.
 
