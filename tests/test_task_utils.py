@@ -1,35 +1,7 @@
 import pytest
 import asyncio
 
-from task_utils import pipe, EOFError, Component
-
-
-@pytest.mark.asyncio
-async def test_pipe():
-    a, b = pipe()
-
-    # send the reply in the background
-    async def reply():
-        b.send_nowait(await b.recv() + 1)
-        await b.send(await b.recv() + 1)
-
-    asyncio.create_task(reply())
-    assert await a.request_sendnowait(1) == 2
-    assert await a.request(2) == 3
-
-    with pytest.raises(ValueError):
-        await a.send(1, eof=True)
-
-    with pytest.raises(ValueError):
-        await a.send()
-
-    a.send_nowait(eof=True)
-    with pytest.raises(EOFError):
-        a.send_nowait('foo')
-    with pytest.raises(EOFError):
-        assert await b.recv()
-    with pytest.raises(EOFError):
-        assert await b.recv()
+from task_utils import Component
 
 
 @pytest.mark.asyncio
