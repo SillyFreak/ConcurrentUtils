@@ -62,9 +62,9 @@ def pipe(maxsize=0) -> Pipe:
     """
 
     class QueueStream:
-        def __init__(self, maxsize=0) -> None:
-            self._queue: asyncio.Queue = asyncio.Queue(maxsize)
-            self._eof = asyncio.locks.Event()
+        def __init__(self, maxsize=0, *, loop=None) -> None:
+            self._queue: asyncio.Queue = asyncio.Queue(maxsize, loop=loop)
+            self._eof = asyncio.locks.Event(loop=loop)
 
         def _check_send(self, value: Any, *, eof: bool) -> None:
             if self._eof.is_set():
@@ -117,5 +117,5 @@ def pipe(maxsize=0) -> Pipe:
         async def recv(self)-> Any:
             return await self._recv.recv()
 
-    a, b = QueueStream(maxsize), QueueStream(maxsize)
+    a, b = QueueStream(maxsize, loop=loop), QueueStream(maxsize, loop=loop)
     return _PipeEnd(a, b), _PipeEnd(b, a)
