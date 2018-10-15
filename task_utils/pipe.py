@@ -243,19 +243,19 @@ else:
                 return self._deserialize(msg)
 
 
-    def zmq_tcp_pipe_end(ctx, side, *, port=None):
+    def zmq_tcp_pipe_end(ctx, side, *, port=0):
         if side == 'a':
-            return ZmqPipeEnd(ctx, zmq.DEALER, 'tcp://*', port=0, bind=True)
+            return ZmqPipeEnd(ctx, zmq.DEALER, 'tcp://*', port=port, bind=True)
         elif side == 'b':
-            if port is None:
+            if port == 0:
                 raise ValueError("b side requires port argument")
             return ZmqPipeEnd(ctx, zmq.ROUTER, 'tcp://127.0.0.1', port=port)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
 
-    async def zmq_tcp_pipe(ctx):
-        a = zmq_tcp_pipe_end(ctx, 'a')
+    async def zmq_tcp_pipe(ctx, *, port=0):
+        a = zmq_tcp_pipe_end(ctx, 'a', port=port)
         b = zmq_tcp_pipe_end(ctx, 'b', port=a.port)
         await a.initialize()
         await b.initialize()

@@ -85,20 +85,31 @@ async def test_zmq_tcp_pipe():
     ctx.destroy()
 
 
+def test_zmq_tcp_pipe_end_errors():
+    ctx = zmq.asyncio.Context()
+
+    with pytest.raises(ValueError):
+        zmq_tcp_pipe_end(ctx, 'c')
+
+    with pytest.raises(ValueError):
+        zmq_tcp_pipe_end(ctx, 'b')
+
+
 @pytest.mark.asyncio
 async def test_zmq_tcp_pipe_separate():
-    async def task(port):
+    async def task():
         ctx = zmq.asyncio.Context()
-        b = zmq_tcp_pipe_end(ctx, 'b', port=port)
+        b = zmq_tcp_pipe_end(ctx, 'b', port=60123)
         await b.initialize()
         assert await b.recv() == "foo"
         ctx.destroy()
 
+    task = asyncio.create_task(task())
+
     ctx = zmq.asyncio.Context()
-    a = zmq_tcp_pipe_end(ctx, 'a')
-    task = asyncio.create_task(task(a.port))
+    a = zmq_tcp_pipe_end(ctx, 'a', port=60123)
     await a.initialize()
     await a.send("foo")
+    ctx.destroy()
 
     await task
-    ctx.destroy()
