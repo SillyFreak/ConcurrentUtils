@@ -260,3 +260,20 @@ else:
         await a.initialize()
         await b.initialize()
         return a, b
+
+
+    def zmq_inproc_pipe_end(ctx, side, endpoint):
+        if side == 'a':
+            return ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None, bind=True)
+        elif side == 'b':
+            return ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None)
+        else:
+            raise ValueError("side must be 'a' or 'b'")
+
+
+    async def zmq_inproc_pipe(ctx, endpoint):
+        a = zmq_inproc_pipe_end(ctx, 'a', endpoint)
+        b = zmq_inproc_pipe_end(ctx, 'b', endpoint)
+        await a.initialize()
+        await b.initialize()
+        return a, b

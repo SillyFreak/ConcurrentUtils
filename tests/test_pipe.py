@@ -3,7 +3,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import zmq.asyncio
 
-from task_utils.pipe import pipe, ConcurrentPipeEnd, zmq_tcp_pipe, zmq_tcp_pipe_end
+from task_utils.pipe import pipe, ConcurrentPipeEnd, zmq_tcp_pipe, zmq_tcp_pipe_end, zmq_inproc_pipe, zmq_inproc_pipe_end
 
 
 @pytest.mark.asyncio
@@ -113,3 +113,48 @@ async def test_zmq_tcp_pipe_separate():
     ctx.destroy()
 
     await task
+
+
+@pytest.mark.asyncio
+async def test_zmq_inproc_pipe():
+    ctx = zmq.asyncio.Context()
+    a, b = await zmq_inproc_pipe(ctx, 'inproc://pipe')
+
+    await b.send("foo")
+    assert await a.recv() == "foo"
+
+    await a.send(eof=True)
+    with pytest.raises(EOFError):
+        await b.recv()
+    with pytest.raises(EOFError):
+        await b.recv()
+    with pytest.raises(EOFError):
+        await a.send("bar")
+
+    ctx.destroy()
+
+
+def test_zmq_inproc_pipe_end_errors():
+    ctx = zmq.asyncio.Context()
+
+    with pytest.raises(ValueError):
+        zmq_inproc_pipe_end(ctx, 'c', 'inproc://pipe')
+
+
+@pytest.mark.asyncio
+async def test_zmq_inproc_pipe_separate():
+    ctx = zmq.asyncio.Context()
+
+    async def task():
+        b = zmq_inproc_pipe_end(ctx, 'b', 'inproc://pipe')
+        await b.initialize()
+        assert await b.recv() == "foo"
+
+    a = zmq_inproc_pipe_end(ctx, 'a', 'inproc://pipe')
+    # bind must happen strictly before connect, so don't start task earlier:
+    task = asyncio.create_task(task())
+    await a.initialize()
+    await a.send("foo")
+    await task
+
+    ctx.destroy()
