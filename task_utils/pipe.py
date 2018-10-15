@@ -4,7 +4,7 @@ import asyncio
 import asyncio.locks
 
 
-__all__ = ['PipeEnd', 'Pipe', 'pipe']
+__all__ = ['PipeEnd', 'Pipe', 'pipe', 'ConcurrentPipeEnd']
 
 
 class PipeEnd:
@@ -41,7 +41,7 @@ class PipeEnd:
 Pipe = Tuple[PipeEnd, PipeEnd]
 
 
-def pipe(maxsize=0) -> Pipe:
+def pipe(maxsize=0, *, loop=None) -> Pipe:
     """\
     A bidirectional pipe of Python objects.
 
@@ -119,3 +119,30 @@ def pipe(maxsize=0) -> Pipe:
 
     a, b = QueueStream(maxsize, loop=loop), QueueStream(maxsize, loop=loop)
     return _PipeEnd(a, b), _PipeEnd(b, a)
+
+
+class ConcurrentPipeEnd(PipeEnd):
+    """
+    Wraps a PipeEnd so that its async functions can be called from a different event loop.
+    The synchronous `send_nowait` method is not supported.
+
+    The `loop` to which the PipeEnd originally belongs must be given, as any async calls are
+    scheduled onto that loop.
+    Multiprocessing is not supported, as access to the actual event loop is required.
+    Objects are transferred by reference; they are not pickled or otherwise serialized.
+    """
+
+    def __init__(self, pipe_end, *, loop) -> None:
+        super().__init__()
+        self._pipe_end = pipe_end
+        self._loop = loop
+
+    async def _run(self, coro):
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return await asyncio.wrap_future(future)
+
+    async def send(self, value=PipeEnd._none, *, eof=False):
+        await self._run(self._pipe_end.send(value, eof=eof))
+
+    async def recv(self):
+        return await self._run(self._pipe_end.recv())

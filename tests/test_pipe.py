@@ -1,7 +1,8 @@
 import pytest
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
-from task_utils.pipe import pipe
+from task_utils.pipe import pipe, ConcurrentPipeEnd
 
 
 @pytest.mark.asyncio
@@ -14,6 +15,38 @@ async def test_pipe():
         await b.send(await b.recv() + 1)
 
     asyncio.create_task(reply())
+    assert await a.request_sendnowait(1) == 2
+    assert await a.request(2) == 3
+
+    with pytest.raises(ValueError):
+        await a.send(1, eof=True)
+
+    with pytest.raises(ValueError):
+        await a.send()
+
+    a.send_nowait(eof=True)
+    with pytest.raises(EOFError):
+        a.send_nowait('foo')
+    with pytest.raises(EOFError):
+        assert await b.recv()
+    with pytest.raises(EOFError):
+        assert await b.recv()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_pipe():
+    loop = asyncio.get_event_loop()
+    p = ThreadPoolExecutor()
+
+    a, b = pipe()
+    b = ConcurrentPipeEnd(b, loop=loop)
+
+    # send the reply in the background
+    async def reply():
+        await b.send(await b.recv() + 1)
+        await b.send(await b.recv() + 1)
+
+    loop.run_in_executor(p, asyncio.run, reply())
     assert await a.request_sendnowait(1) == 2
     assert await a.request(2) == 3
 
