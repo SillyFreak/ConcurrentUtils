@@ -146,3 +146,117 @@ class ConcurrentPipeEnd(PipeEnd):
 
     async def recv(self):
         return await self._run(self._pipe_end.recv())
+
+
+try:
+    import zmq
+except ImportError:  # pragma: nocover
+    pass
+else:
+    try:  # pragma: nocover
+        import cPickle
+        pickle = cPickle
+    except:  # pragma: nocover
+        cPickle = None
+        import pickle
+
+
+    class ZmqPipeEnd(PipeEnd):
+        """
+        A PipeEnd backed by an asynchronous ZMQ socket.
+        This PipeEnd can be used for multiprocessing; it will serialize objects that are transmitted.
+        The default serialization mechanism is pickle,
+        which can be customized by overriding the `_serialize` and `_deserialize` methods.
+        The synchronous `send_nowait` method is not supported.
+        """
+
+        def __init__(self, ctx, socket_type, address, *, port, bind=False) -> None:
+            super().__init__()
+            if socket_type not in {zmq.DEALER, zmq.ROUTER}:
+                raise ValueError("DEALER or ROUTER socket type required")
+
+            self._sock = ctx.socket(socket_type)
+            self._socket_type = socket_type
+            if bind:
+                if port is None:
+                    self._sock.bind(address)
+                elif port == 0:
+                    port = self._sock.bind_to_random_port(address)
+                else:
+                    self._sock.bind(f'{address}:{port}')
+            else:
+                if port is None:
+                    self._sock.connect(address)
+                else:
+                    self._sock.connect(f'{address}:{port}')
+            self.port = port
+            self._dealer_ident = None
+
+            self._eof_sent = False
+            self._eof_recvd = False
+
+        async def initialize(self):
+            if self._socket_type == zmq.ROUTER:
+                self._dealer_ident, _ = await self._sock.recv_multipart()
+            else:
+                await self._sock.send_multipart([b''])
+
+        async def _send(self, *parts):
+            if self._socket_type == zmq.ROUTER:
+                parts = [self._dealer_ident, *parts]
+            await self._sock.send_multipart(parts)
+
+        async def _recv(self):
+            parts = await self._sock.recv_multipart()
+            if self._socket_type == zmq.ROUTER:
+                parts = parts[1:]
+            return parts
+
+        def _serialize(self, value):
+            return pickle.dumps(value, pickle.DEFAULT_PROTOCOL)
+
+        def _deserialize(self, msg):
+            return pickle.loads(msg)
+
+        async def send(self, value=PipeEnd._none, *, eof=False):
+            if self._eof_sent:
+                raise EOFError("Cannot send after EOF")
+            PipeEnd.check_send_args(value, eof=eof)
+
+            if eof:
+                await self._send(b'')
+                self._eof_sent = True
+            else:
+                msg = self._serialize(value)
+                await self._send(b'', msg)
+
+        async def recv(self):
+            if self._eof_recvd:
+                raise EOFError("Cannot receive after EOF")
+
+            msg = await self._recv()
+            if len(msg) == 1:
+                self._eof_recvd = True
+                raise EOFError
+            else:
+                _, msg = msg
+                return self._deserialize(msg)
+
+
+    def zmq_tcp_pipe_end(ctx, side, *, port=None):
+        if side == 'a':
+            return ZmqPipeEnd(ctx, zmq.DEALER, 'tcp://*', port=0, bind=True)
+        elif side == 'b':
+            if port is None:
+                raise ValueError("b side requires port argument")
+            return ZmqPipeEnd(ctx, zmq.ROUTER, 'tcp://127.0.0.1', port=port)
+        else:
+            raise ValueError("side must be 'a' or 'b'")
+
+
+    async def zmq_tcp_pipe(ctx):
+        a = zmq_tcp_pipe_end(ctx, 'a')
+        b = zmq_tcp_pipe_end(ctx, 'b', port=a.port)
+        await a.initialize()
+        await b.initialize()
+        return a, b

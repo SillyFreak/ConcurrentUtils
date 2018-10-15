@@ -52,6 +52,7 @@ setup(
     # You can install these using the following syntax, for example:
     # $ pip install -e .[dev,test]
     extras_require={
+        'zmq': ['pyzmq'],
         'test': ['pytest', 'pytest-runner', 'pytest-asyncio', 'pytest-cov', 'mypy'],
     },
 

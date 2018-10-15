@@ -1,8 +1,9 @@
 import pytest
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import zmq.asyncio
 
-from task_utils.pipe import pipe, ConcurrentPipeEnd
+from task_utils.pipe import pipe, ConcurrentPipeEnd, zmq_tcp_pipe, zmq_tcp_pipe_end
 
 
 @pytest.mark.asyncio
@@ -63,3 +64,41 @@ async def test_concurrent_pipe():
         assert await b.recv()
     with pytest.raises(EOFError):
         assert await b.recv()
+
+
+@pytest.mark.asyncio
+async def test_zmq_tcp_pipe():
+    ctx = zmq.asyncio.Context()
+    a, b = await zmq_tcp_pipe(ctx)
+
+    await b.send("foo")
+    assert await a.recv() == "foo"
+
+    await a.send(eof=True)
+    with pytest.raises(EOFError):
+        await b.recv()
+    with pytest.raises(EOFError):
+        await b.recv()
+    with pytest.raises(EOFError):
+        await a.send("bar")
+
+    ctx.destroy()
+
+
+@pytest.mark.asyncio
+async def test_zmq_tcp_pipe_separate():
+    async def task(port):
+        ctx = zmq.asyncio.Context()
+        b = zmq_tcp_pipe_end(ctx, 'b', port=port)
+        await b.initialize()
+        assert await b.recv() == "foo"
+        ctx.destroy()
+
+    ctx = zmq.asyncio.Context()
+    a = zmq_tcp_pipe_end(ctx, 'a')
+    task = asyncio.create_task(task(a.port))
+    await a.initialize()
+    await a.send("foo")
+
+    await task
+    ctx.destroy()
