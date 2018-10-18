@@ -62,10 +62,8 @@ class Component(Generic[T]):
     ...     return count
     ...
     >>> async def example():
-    ...     comp = Component(component, "Hello World")
-    ...
     ...     print("call start")
-    ...     await comp.start()
+    ...     comp = await start_component(component, "Hello World")
     ...     print("done")
     ...
     ...     print("send command")
@@ -229,3 +227,9 @@ class Component(Generic[T]):
         Sends a reply for an event received from the task.
         """
         self._events.send_nowait(value)
+
+
+async def start_component(coro_func: CoroutineFunction, *args: Any, **kwargs: Any) -> Component:
+    component = Component(coro_func, *args, **kwargs)
+    await component.start()
+    return component

@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 
-from task_utils import Component
+from task_utils import Component, start_component
 
 
 @pytest.mark.asyncio
@@ -10,9 +10,8 @@ async def test_component_start_return():
         # return before START
         return x
 
-    comp = Component(component, 1)
     with pytest.raises(Component.LifecycleError) as exc_info:
-        await comp.start()
+        await start_component(component, 1)
     result, = exc_info.value.__cause__.args
     assert result == 1
 
@@ -25,38 +24,36 @@ async def test_component_start_raise():
         # raise before START
         raise Fail
 
-    comp = Component(component, 1)
     with pytest.raises(Fail) as exc_info:
-        await comp.start()
+        await start_component(component, 1)
 
 
 @pytest.mark.asyncio
 async def test_component_start_event():
     EVENT = 'EVENT'
 
-    flag = False
+    finished = False
+    cancelled = False
 
     async def component(x, *, commands, events):
-        nonlocal flag
+        nonlocal finished, cancelled
 
-        # send WRONG event
-        events.send_nowait(EVENT)
-        await asyncio.sleep(0.05)
-        flag = True
+        try:
+            # send WRONG event
+            events.send_nowait(EVENT)
+            await asyncio.sleep(0.05)
+            finished = True
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
 
 
-    comp = Component(component, 1)
     with pytest.raises(Component.LifecycleError):
-        await comp.start()
+        await start_component(component, 1)
 
     await asyncio.sleep(0.1)
-    assert not flag
-
-    with pytest.raises(Component.Failure) as exc_info:
-        await comp.task
-    exc, = exc_info.value.args
-    with pytest.raises(asyncio.CancelledError):
-        raise exc
+    assert not finished
+    assert cancelled
 
 
 @pytest.mark.asyncio
@@ -71,8 +68,7 @@ async def test_component_result_success_and_command():
         # return
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     assert await comp.request(1) == 2
 
@@ -90,8 +86,7 @@ async def test_component_result_exception():
         # raise
         raise Fail
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Fail):
         await comp.result()
@@ -111,8 +106,7 @@ async def test_component_result_event():
         # return
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Component.EventException) as exc_info:
         await comp.result()
@@ -133,8 +127,7 @@ async def test_component_stop_success():
         assert command == Component.COMMAND_STOP
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     assert await comp.stop() == 1
 
@@ -152,8 +145,7 @@ async def test_component_stop_exception():
         assert command == Component.COMMAND_STOP
         raise Fail
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Fail):
         await comp.stop()
@@ -177,8 +169,7 @@ async def test_component_stop_event():
         assert command == Component.COMMAND_STOP
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Component.EventException) as exc_info:
         await comp.stop()
@@ -197,8 +188,7 @@ async def test_component_cancel_cancels():
         # wait for cancellation
         await asyncio.sleep(1)
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(asyncio.CancelledError):
         await comp.cancel()
@@ -215,8 +205,7 @@ async def test_component_cancel_success():
             await asyncio.sleep(1)
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     assert await comp.cancel() == 1
 
@@ -234,8 +223,7 @@ async def test_component_cancel_exception():
             await asyncio.sleep(1)
         raise Fail
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Fail):
         await comp.cancel()
@@ -259,8 +247,7 @@ async def test_component_cancel_event():
             await asyncio.sleep(1)
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Component.EventException) as exc_info:
         await comp.cancel()
@@ -282,8 +269,7 @@ async def test_component_recv_event_and_reply():
         # return
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     assert await comp.recv_event() == 1
     comp.send_event_reply(2)
@@ -300,8 +286,7 @@ async def test_component_recv_event_return():
         # return
         return x
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Component.Success) as exc_info:
         await comp.recv_event()
@@ -320,8 +305,7 @@ async def test_component_recv_event_raise():
         # raise
         raise Fail
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Component.Failure) as exc_info:
         await comp.recv_event()
@@ -338,8 +322,7 @@ async def test_component_manual_eof_event():
 
         events.send_nowait(eof=True)
 
-    comp = Component(component, 1)
-    await comp.start()
+    comp = await start_component(component, 1)
 
     with pytest.raises(Component.LifecycleError):
         await comp.recv_event()
