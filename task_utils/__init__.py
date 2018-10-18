@@ -1,8 +1,8 @@
-from typing import cast, Any, Awaitable, Callable, Generic, Optional, TypeVar
+from typing import cast, Any, Awaitable, Callable, Generic, TypeVar
 import asyncio
 import functools
 
-from .pipe import pipe, PipeEnd
+from .pipe import pipe, PipeEnd, ConcurrentPipeEnd
 
 
 __all__ = ['Component']
@@ -70,19 +70,20 @@ class Component(Generic[T]):
                 self.cancel_nowait()
                 raise Component.LifecycleError(f"Component must emit EVENT_START, was {start_event}")
 
-    def stop_nowait(self) -> None:
+    async def stop_nowait(self) -> None:
         """\
         Stop the component; sends `Component.COMMAND_STOP` to the task.
         Stopping requires the component to receive the command and actively comply with it.
         It is a clean method of shutdown, but requires active cooperation.
+        This method may block on sending the command, but will not wait for the component to shut down.
         """
-        self.send(Component.COMMAND_STOP)
+        await self.send(Component.COMMAND_STOP)
 
     async def stop(self) -> T:
         """\
         Stop the component; calls `stop_nowait()` and returns `result()`.
         """
-        self.stop_nowait()
+        await self.stop_nowait()
         return await self.result()
 
     def cancel_nowait(self) -> None:
@@ -119,11 +120,11 @@ class Component(Generic[T]):
             # there was a regular event; shouldn't happen/is exceptional
             raise Component.EventException(event)
 
-    def send(self, value: Any) -> None:
+    async def send(self, value: Any) -> None:
         """\
         Sends a command to the task.
         """
-        self._commands.send_nowait(value)
+        await self._commands.send(value)
 
     async def recv(self) -> Any:
         """\
@@ -135,7 +136,7 @@ class Component(Generic[T]):
         """\
         Sends a command to and receives the reply from the task.
         """
-        self.send(value)
+        await self.send(value)
         return await self.recv()
 
     async def recv_event(self) -> Any:
@@ -149,13 +150,13 @@ class Component(Generic[T]):
             return await self._events.recv()
         except EOFError:
             # component has terminated, raise the cause (either Failure, or LifecycleError) or Success
-            raise Component.Success(self._future.result())
+            raise Component.Success(await self._future)
 
-    def send_event_reply(self, value: Any) -> None:
+    async def send_event_reply(self, value: Any) -> None:
         """\
         Sends a reply for an event received from the task.
         """
-        self._events.send_nowait(value)
+        await self._events.send(value)
 
 
 async def component_coro_wrapper(coro_func: CoroutineFunction,
@@ -177,7 +178,7 @@ async def component_coro_wrapper(coro_func: CoroutineFunction,
         raise Component.Failure(err) from None
     finally:
         try:
-            events.send_nowait(eof=True)
+            await events.send(eof=True)
         except EOFError as err:
             raise Component.LifecycleError("component closed events pipe manually") from err
 
@@ -198,7 +199,7 @@ async def start_component(workload: CoroutineFunction, *args: Any, **kwargs: Any
     ... async def component(msg, *, commands, events):
     ...     # do any startup tasks here
     ...     print("> component starting up...")
-    ...     events.send_nowait(Component.EVENT_START)
+    ...     await events.send(Component.EVENT_START)
     ...
     ...     count = 0
     ...     while True:
@@ -210,12 +211,12 @@ async def start_component(workload: CoroutineFunction, *args: Any, **kwargs: Any
     ...             print(f"> {msg}")
     ...             count += 1
     ...             # acknowledge the command was serviced completely
-    ...             commands.send_nowait(None)
+    ...             await commands.send(None)
     ...         else:
     ...             # unknown command; terminate
     ...             # by closing the commands pipe,
     ...             # the caller (if waiting for a reply) will receive an EOFError
-    ...             commands.send_nowait(eof=True)
+    ...             await commands.send(eof=True)
     ...             raise ValueError
     ...
     ...     # do any cleanup tasks here, probably in a finally block

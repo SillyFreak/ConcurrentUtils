@@ -43,7 +43,7 @@ async def test_component_start_event():
 
         try:
             # send WRONG event
-            events.send_nowait(EVENT)
+            await events.send(EVENT)
             await asyncio.sleep(0.05)
             finished = True
         except asyncio.CancelledError:
@@ -63,11 +63,11 @@ async def test_component_start_event():
 async def test_component_result_success_and_command():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # reply to command
-        commands.send_nowait(await commands.recv() + 1)
+        await commands.send(await commands.recv() + 1)
 
         # return
         return x
@@ -85,7 +85,7 @@ async def test_component_result_exception():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # raise
@@ -103,11 +103,11 @@ async def test_component_result_event():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # send event
-        events.send_nowait(EVENT)
+        await events.send(EVENT)
 
         # return
         return x
@@ -126,7 +126,7 @@ async def test_component_result_event():
 async def test_component_stop_success():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # receive STOP and return
@@ -145,7 +145,7 @@ async def test_component_stop_exception():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # receive STOP and raise
@@ -165,13 +165,13 @@ async def test_component_stop_event():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # receive STOP and send EVENT
         command = await commands.recv()
         assert command == Component.COMMAND_STOP
-        events.send_nowait(EVENT)
+        await events.send(EVENT)
 
         # receive STOP and return
         command = await commands.recv()
@@ -192,7 +192,7 @@ async def test_component_stop_event():
 async def test_component_cancel_cancels():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # wait for cancellation
@@ -208,7 +208,7 @@ async def test_component_cancel_cancels():
 async def test_component_cancel_success():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # wait for cancellation and return
@@ -227,7 +227,7 @@ async def test_component_cancel_exception():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # wait for cancellation and raise
@@ -247,13 +247,13 @@ async def test_component_cancel_event():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # wait for cancellation and send EVENT
         with pytest.raises(asyncio.CancelledError):
             await asyncio.sleep(1)
-        events.send_nowait(EVENT)
+        await events.send(EVENT)
 
         # wait for cancellation and return
         with pytest.raises(asyncio.CancelledError):
@@ -274,7 +274,7 @@ async def test_component_cancel_event():
 async def test_component_recv_event_and_reply():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # send event
@@ -286,7 +286,7 @@ async def test_component_recv_event_and_reply():
     comp = await start_component(component, 1)
 
     assert await comp.recv_event() == 1
-    comp.send_event_reply(2)
+    await comp.send_event_reply(2)
 
     assert await comp.result() == 1
 
@@ -295,7 +295,7 @@ async def test_component_recv_event_and_reply():
 async def test_component_recv_event_return():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # return
@@ -315,7 +315,7 @@ async def test_component_recv_event_raise():
 
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
         # raise
@@ -334,10 +334,10 @@ async def test_component_recv_event_raise():
 async def test_component_manual_eof_event():
     @component_workload
     async def component(x, *, commands, events):
-        events.send_nowait(Component.EVENT_START)
+        await events.send(Component.EVENT_START)
         ### startup complete
 
-        events.send_nowait(eof=True)
+        await events.send(eof=True)
 
     comp = await start_component(component, 1)
 
