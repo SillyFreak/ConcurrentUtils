@@ -67,11 +67,16 @@ async def test_concurrent_pipe():
         assert await b.recv()
 
 
-def test_ZmqPipeEnd_errors():
+@pytest.mark.asyncio
+async def test_ZmqPipeEnd_errors():
     ctx = zmq.asyncio.Context()
 
     with pytest.raises(ValueError):
         ZmqPipeEnd(ctx, zmq.PUSH, 'tcp://*', port=0, bind=True)
+
+    with pytest.raises(RuntimeError):
+        a = ZmqPipeEnd(ctx, zmq.PAIR, 'inproc://asdf', port=None, bind=True)
+        await a.initialize()
 
 
 @pytest.mark.asyncio
@@ -125,7 +130,7 @@ async def test_zmq_tcp_pipe_separate():
 @pytest.mark.asyncio
 async def test_zmq_inproc_pipe():
     ctx = zmq.asyncio.Context()
-    a, b = await zmq_inproc_pipe(ctx, 'inproc://pipe')
+    a, b = zmq_inproc_pipe(ctx, 'inproc://pipe')
 
     await b.send("foo")
     assert await a.recv() == "foo"
@@ -146,7 +151,7 @@ async def test_zmq_inproc_pipe_end_errors():
     ctx = zmq.asyncio.Context()
 
     with pytest.raises(ValueError):
-        await zmq_inproc_pipe_end(ctx, 'c', 'inproc://pipe')
+        zmq_inproc_pipe_end(ctx, 'c', 'inproc://pipe')
 
 
 @pytest.mark.asyncio
@@ -154,14 +159,13 @@ async def test_zmq_inproc_pipe_separate():
     ctx = zmq.asyncio.Context()
 
     async def task():
-        b = await zmq_inproc_pipe_end(ctx, 'b', 'inproc://pipe')
+        b = zmq_inproc_pipe_end(ctx, 'b', 'inproc://pipe')
         assert await b.recv() == "foo"
 
-    a = await zmq_inproc_pipe_end(ctx, 'a', 'inproc://pipe', initialize=False)
+    a = zmq_inproc_pipe_end(ctx, 'a', 'inproc://pipe')
     # bind must happen strictly before connect, so don't start task earlier:
     task = asyncio.create_task(task())
     # can't initialize before connect is possible
-    await a.initialize()
     await a.send("foo")
     await task
 
