@@ -273,6 +273,35 @@ else:
         return a, b
 
 
+    async def zmq_ipc_pipe_end(ctx, side, endpoint, *, initialize=True):
+        """
+        Returns a `ZmqPipeEnd` backed by an `ipc` connection; the endpoint must contain the scheme part.
+        If both ends of the connection are created on the same thread/task,
+        it's necessary to pass `initialize=False` and then initialize manually,
+        to avoid a deadlock.
+        In that case, prefer `zmq_ipc_pipe` for creating both ends.
+        """
+
+        if side == 'a':
+            result = ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None, bind=True)
+        elif side == 'b':
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None)
+        else:
+            raise ValueError("side must be 'a' or 'b'")
+
+        if initialize:
+            await result.initialize()
+        return result
+
+
+    async def zmq_ipc_pipe(ctx, endpoint):
+        a = await zmq_ipc_pipe_end(ctx, 'a', endpoint, initialize=False)
+        b = await zmq_ipc_pipe_end(ctx, 'b', endpoint, initialize=False)
+        await a.initialize()
+        await b.initialize()
+        return a, b
+
+
     def zmq_inproc_pipe_end(ctx, side, endpoint):
         """
         Returns a `ZmqPipeEnd` backed by an `inproc` connection; the endpoint must contain the scheme part.
