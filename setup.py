@@ -53,6 +53,7 @@ setup(
     # $ pip install -e .[dev,test]
     extras_require={
         'zmq': ['pyzmq'],
+        'msgpack': ['msgpack'],
         'test': ['pytest', 'pytest-runner', 'pytest-asyncio', 'pytest-cov', 'mypy'],
     },
 
