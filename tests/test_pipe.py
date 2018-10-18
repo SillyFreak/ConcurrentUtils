@@ -3,7 +3,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import zmq.asyncio
 
-from task_utils.pipe import pipe, ConcurrentPipeEnd, zmq_tcp_pipe, zmq_tcp_pipe_end, zmq_inproc_pipe, zmq_inproc_pipe_end
+from task_utils.pipe import pipe, ConcurrentPipeEnd
+from task_utils.pipe import zmq_tcp_pipe, zmq_tcp_pipe_end, zmq_inproc_pipe, zmq_inproc_pipe_end, ZmqPipeEnd
 
 
 @pytest.mark.asyncio
@@ -64,6 +65,13 @@ async def test_concurrent_pipe():
         assert await b.recv()
     with pytest.raises(EOFError):
         assert await b.recv()
+
+
+def test_ZmqPipeEnd_errors():
+    ctx = zmq.asyncio.Context()
+
+    with pytest.raises(ValueError):
+        ZmqPipeEnd(ctx, zmq.PUSH, 'tcp://*', port=0, bind=True)
 
 
 @pytest.mark.asyncio
