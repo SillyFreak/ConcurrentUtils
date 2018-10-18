@@ -1,11 +1,12 @@
 import pytest
 import asyncio
 
-from task_utils import Component, start_component
+from task_utils import Component, component_workload, start_component
 
 
 @pytest.mark.asyncio
 async def test_component_start_return():
+    @component_workload
     async def component(x, *, commands, events):
         # return before START
         return x
@@ -20,6 +21,7 @@ async def test_component_start_return():
 async def test_component_start_raise():
     class Fail(Exception): pass
 
+    @component_workload
     async def component(x, *, commands, events):
         # raise before START
         raise Fail
@@ -35,6 +37,7 @@ async def test_component_start_event():
     finished = False
     cancelled = False
 
+    @component_workload
     async def component(x, *, commands, events):
         nonlocal finished, cancelled
 
@@ -58,6 +61,7 @@ async def test_component_start_event():
 
 @pytest.mark.asyncio
 async def test_component_result_success_and_command():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -79,6 +83,7 @@ async def test_component_result_success_and_command():
 async def test_component_result_exception():
     class Fail(Exception): pass
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -96,6 +101,7 @@ async def test_component_result_exception():
 async def test_component_result_event():
     EVENT = 'EVENT'
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -118,6 +124,7 @@ async def test_component_result_event():
 
 @pytest.mark.asyncio
 async def test_component_stop_success():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -136,6 +143,7 @@ async def test_component_stop_success():
 async def test_component_stop_exception():
     class Fail(Exception): pass
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -155,6 +163,7 @@ async def test_component_stop_exception():
 async def test_component_stop_event():
     EVENT = 'EVENT'
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -181,6 +190,7 @@ async def test_component_stop_event():
 
 @pytest.mark.asyncio
 async def test_component_cancel_cancels():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -196,6 +206,7 @@ async def test_component_cancel_cancels():
 
 @pytest.mark.asyncio
 async def test_component_cancel_success():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -214,6 +225,7 @@ async def test_component_cancel_success():
 async def test_component_cancel_exception():
     class Fail(Exception): pass
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -233,6 +245,7 @@ async def test_component_cancel_exception():
 async def test_component_cancel_event():
     EVENT = 'EVENT'
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -259,6 +272,7 @@ async def test_component_cancel_event():
 
 @pytest.mark.asyncio
 async def test_component_recv_event_and_reply():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -279,6 +293,7 @@ async def test_component_recv_event_and_reply():
 
 @pytest.mark.asyncio
 async def test_component_recv_event_return():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -298,6 +313,7 @@ async def test_component_recv_event_return():
 async def test_component_recv_event_raise():
     class Fail(Exception): pass
 
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete
@@ -316,6 +332,7 @@ async def test_component_recv_event_raise():
 
 @pytest.mark.asyncio
 async def test_component_manual_eof_event():
+    @component_workload
     async def component(x, *, commands, events):
         events.send_nowait(Component.EVENT_START)
         ### startup complete

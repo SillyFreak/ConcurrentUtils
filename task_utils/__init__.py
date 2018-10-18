@@ -1,5 +1,6 @@
 from typing import cast, Any, Awaitable, Callable, Generic, Optional, TypeVar
 import asyncio
+import functools
 
 from .pipe import pipe, PipeEnd
 
@@ -181,7 +182,11 @@ async def component_coro_wrapper(coro_func: CoroutineFunction,
             raise Component.LifecycleError("component closed events pipe manually") from err
 
 
-async def start_component(coro_func: CoroutineFunction, *args: Any, **kwargs: Any) -> Component:
+def component_workload(coro_func):
+    return functools.partial(component_coro_wrapper, coro_func)
+
+
+async def start_component(workload: CoroutineFunction, *args: Any, **kwargs: Any) -> Component:
     """\
     Starts the passed `coro_func` as a component workload with additional `commands` and `events` pipes.
     The workload will be executed as a task.
@@ -189,7 +194,8 @@ async def start_component(coro_func: CoroutineFunction, *args: Any, **kwargs: An
     A simple example. Note that here, the component is exclusively reacting to commands,
     and the owner waits for acknowledgements to its commands, making the order of outputs predictable.
 
-    >>> async def component(msg, *, commands, events):
+    >>> @component_workload
+    ... async def component(msg, *, commands, events):
     ...     # do any startup tasks here
     ...     print("> component starting up...")
     ...     events.send_nowait(Component.EVENT_START)
@@ -243,11 +249,11 @@ async def start_component(coro_func: CoroutineFunction, *args: Any, **kwargs: An
     done
     1
     """
+
     commands_a, commands_b = pipe()
     events_a, events_b = pipe()
 
-    coro = component_coro_wrapper(coro_func, *args, commands=commands_b, events=events_b, **kwargs)
-    task = asyncio.create_task(coro)
+    task = asyncio.create_task(workload(*args, commands=commands_b, events=events_b, **kwargs))
 
     component = Component(commands_a, events_a, task)
     await component.wait_for_start()
