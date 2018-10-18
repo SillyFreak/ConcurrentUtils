@@ -130,7 +130,7 @@ async def test_zmq_tcp_pipe_separate():
 @pytest.mark.asyncio
 async def test_zmq_ipc_pipe():
     ctx = zmq.asyncio.Context()
-    a, b = await zmq_ipc_pipe(ctx, 'ipc://asdf.ipc')
+    a, b = await zmq_ipc_pipe(ctx, 'ipc://pipe.ipc')
 
     await b.send("foo")
     assert await a.recv() == "foo"
@@ -151,21 +151,21 @@ async def test_zmq_ipc_pipe_end_errors():
     ctx = zmq.asyncio.Context()
 
     with pytest.raises(ValueError):
-        await zmq_ipc_pipe_end(ctx, 'c', 'ipc://asdf.ipc')
+        await zmq_ipc_pipe_end(ctx, 'c', 'ipc://pipe.ipc')
 
 
 @pytest.mark.asyncio
 async def test_zmq_ipc_pipe_separate():
     async def task():
         ctx = zmq.asyncio.Context()
-        b = await zmq_ipc_pipe_end(ctx, 'b', 'ipc://asdf.ipc')
+        b = await zmq_ipc_pipe_end(ctx, 'b', 'ipc://pipe.ipc')
         assert await b.recv() == "foo"
         ctx.destroy()
 
     task = asyncio.create_task(task())
 
     ctx = zmq.asyncio.Context()
-    a = await zmq_ipc_pipe_end(ctx, 'a', 'ipc://asdf.ipc')
+    a = await zmq_ipc_pipe_end(ctx, 'a', 'ipc://pipe.ipc')
     await a.send("foo")
     ctx.destroy()
 

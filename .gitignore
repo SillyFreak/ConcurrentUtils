@@ -16,3 +16,5 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
+
+pipe.ipc
