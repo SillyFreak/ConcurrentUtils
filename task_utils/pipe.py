@@ -152,7 +152,7 @@ class ConcurrentPipeEnd(PipeEnd):
 
 try:
     import zmq
-except ImportError:  # pragma: nocover
+except:  # pragma: nocover
     pass
 else:
     try:  # pragma: nocover

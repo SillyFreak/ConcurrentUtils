@@ -32,7 +32,7 @@ class Pickle(Serializer):
 
 try:
     import msgpack
-except:
+except:  # pragma: nocover
     pass
 else:
     class Msgpack(Serializer):
