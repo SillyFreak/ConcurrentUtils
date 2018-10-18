@@ -124,7 +124,7 @@ def pipe(maxsize=0, *, loop=None) -> Pipe:
 class ConcurrentPipeEnd(PipeEnd):
     """
     Wraps a PipeEnd so that its async functions can be called from a different event loop.
-    The synchronous `send_nowait` method is not supported.
+    The synchronous `send_nowait` method as well as `request_sendnowait` are not supported.
 
     The `loop` to which the PipeEnd originally belongs must be given, as any async calls are
     scheduled onto that loop.
