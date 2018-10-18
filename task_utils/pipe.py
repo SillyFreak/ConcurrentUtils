@@ -2,6 +2,7 @@ from abc import abstractmethod
 from typing import cast, Any, Optional, Sequence, Tuple
 import asyncio
 import asyncio.locks
+import random
 
 from .serializers import Serializer, Pickle
 
@@ -176,17 +177,23 @@ else:
             self._socket_type = socket_type
             if bind:
                 if port is None:
-                    self._sock.bind(address)
+                    endpoint = address
+                    self._sock.bind(endpoint)
                 elif port == 0:
                     port = self._sock.bind_to_random_port(address)
+                    endpoint = f'{address}:{port}'
                 else:
-                    self._sock.bind(f'{address}:{port}')
+                    endpoint = f'{address}:{port}'
+                    self._sock.bind(endpoint)
             else:
                 if port is None:
+                    endpoint = address
                     self._sock.connect(address)
                 else:
-                    self._sock.connect(f'{address}:{port}')
+                    endpoint = f'{address}:{port}'
+                    self._sock.connect(endpoint)
             self.port = port
+            self.endpoint = endpoint
             self._dealer_ident: Optional[bytes] = None
 
             self._serializer: Serializer = serializer or Pickle()
@@ -308,21 +315,33 @@ else:
         return a, b
 
 
-    def zmq_inproc_pipe_end(ctx, side, endpoint):
+    def zmq_inproc_pipe_end(ctx, side, endpoint=None):
         """
         Returns a `ZmqPipeEnd` backed by an `inproc` connection; the endpoint must contain the scheme part.
         The inproc transport uses PAIR sockets, not requiring `initialize()`.
         """
 
         if side == 'a':
-            return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None, bind=True)
+            if endpoint is not None:
+                return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None, bind=True)
+
+            for i in range(100):
+                endpoint = f'inproc://pipe-{random.randrange(2**32):#010x}'
+                try:
+                    return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None, bind=True)
+                except zmq.ZMQError:  # pragma: nocover
+                    pass
+            else:  # pragma: nocover
+                raise zmq.ZMQBindError("Could not bind socket to random pipe endpoint.")
         elif side == 'b':
+            if endpoint is None:
+                raise ValueError("b side requires endpoint argument")
             return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
 
-    def zmq_inproc_pipe(ctx, endpoint):
+    def zmq_inproc_pipe(ctx, endpoint=None):
         a = zmq_inproc_pipe_end(ctx, 'a', endpoint)
-        b = zmq_inproc_pipe_end(ctx, 'b', endpoint)
+        b = zmq_inproc_pipe_end(ctx, 'b', a.endpoint)
         return a, b

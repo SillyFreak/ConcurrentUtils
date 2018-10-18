@@ -175,7 +175,7 @@ async def test_zmq_ipc_pipe_separate():
 @pytest.mark.asyncio
 async def test_zmq_inproc_pipe():
     ctx = zmq.asyncio.Context()
-    a, b = zmq_inproc_pipe(ctx, 'inproc://pipe')
+    a, b = zmq_inproc_pipe(ctx)
 
     await b.send("foo")
     assert await a.recv() == "foo"
@@ -196,7 +196,10 @@ async def test_zmq_inproc_pipe_end_errors():
     ctx = zmq.asyncio.Context()
 
     with pytest.raises(ValueError):
-        zmq_inproc_pipe_end(ctx, 'c', 'inproc://pipe')
+        zmq_inproc_pipe_end(ctx, 'c')
+
+    with pytest.raises(ValueError):
+        zmq_inproc_pipe_end(ctx, 'b')
 
 
 @pytest.mark.asyncio
