@@ -97,27 +97,12 @@ class Component(Generic[T]):
     EVENT_START = 'EVENT_START'
     COMMAND_STOP = 'COMMAND_STOP'
 
-    def __init__(self, coro_func: CoroutineFunction, *args: Any, **kwargs: Any) -> None:
-        self._commands, commands = pipe()
-        self._events, events = pipe()
-        self._coro_func = lambda: self._coro_wrapper(coro_func, *args, commands=commands, events=events, **kwargs)
-        self.task: Optional[asyncio.Task] = None
+    def __init__(self, commands: PipeEnd, events: PipeEnd, future: asyncio.Future) -> None:
+        self._commands = commands
+        self._events = events
+        self._future = future
 
-    async def _coro_wrapper(self, coro_func: CoroutineFunction,
-                            *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> None:
-        try:
-            result = await coro_func(*args, commands=commands, events=events, **kwargs)
-        except Exception as err:
-            raise Component.Failure(err) from None
-        else:
-            raise Component.Success(result)
-        finally:
-            try:
-                events.send_nowait(eof=True)
-            except EOFError as err:
-                raise Component.LifecycleError("component closed events pipe manually") from err
-
-    async def start(self) -> None:
+    async def wait_for_start(self) -> None:
         """\
         Start the component. This waits for `Component.EVENT_START` to be sent from the task.
         If the task returns without an event, a `LifecycleError` is raised with a `Success` as its cause.
@@ -125,7 +110,6 @@ class Component(Generic[T]):
         If the task sends a different event than `Component.EVENT_START`,
         the task is cancelled (without waiting for the task to shut down) and a `LifecycleError` is raised.
         """
-        self.task = asyncio.create_task(self._coro_func())
         try:
             start_event = await self.recv_event()
         except Component.Success as succ:
@@ -136,7 +120,7 @@ class Component(Generic[T]):
             raise cause from None
         else:
             if start_event != Component.EVENT_START:
-                self.task.cancel()
+                self.cancel_nowait()
                 raise Component.LifecycleError(f"Component must emit EVENT_START, was {start_event}")
 
     def stop_nowait(self) -> None:
@@ -160,7 +144,7 @@ class Component(Generic[T]):
         Cancelling raises a `CancelledError` into the task, which will normally terminate it.
         It is a forced method of shutdown, and only requires the component to not actively ignore cancellations.
         """
-        cast(asyncio.Task, self.task).cancel()
+        self._future.cancel()
 
     async def cancel(self) -> T:
         """\
@@ -219,7 +203,7 @@ class Component(Generic[T]):
         except EOFError:
             # component has terminated, raise the cause
             # either Success, Failure, or LifecycleError
-            cast(asyncio.Task, self.task).result()
+            self._future.result()
             assert False  # pragma: nocover
 
     def send_event_reply(self, value: Any) -> None:
@@ -229,7 +213,28 @@ class Component(Generic[T]):
         self._events.send_nowait(value)
 
 
+async def component_coro_wrapper(coro_func: CoroutineFunction,
+                                 *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> None:
+    try:
+        result = await coro_func(*args, commands=commands, events=events, **kwargs)
+    except Exception as err:
+        raise Component.Failure(err) from None
+    else:
+        raise Component.Success(result)
+    finally:
+        try:
+            events.send_nowait(eof=True)
+        except EOFError as err:
+            raise Component.LifecycleError("component closed events pipe manually") from err
+
+
 async def start_component(coro_func: CoroutineFunction, *args: Any, **kwargs: Any) -> Component:
-    component = Component(coro_func, *args, **kwargs)
-    await component.start()
+    commands_a, commands_b = pipe()
+    events_a, events_b = pipe()
+
+    coro = component_coro_wrapper(coro_func, *args, commands=commands_b, events=events_b, **kwargs)
+    task = asyncio.create_task(coro)
+
+    component = Component(commands_a, events_a, task)
+    await component.wait_for_start()
     return component
