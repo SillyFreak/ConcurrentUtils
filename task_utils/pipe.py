@@ -155,14 +155,6 @@ try:
 except:  # pragma: nocover
     pass
 else:
-    try:  # pragma: nocover
-        import cPickle
-        pickle = cPickle
-    except:  # pragma: nocover
-        cPickle = None
-        import pickle
-
-
     class ZmqPipeEnd(PipeEnd):
         """
         A PipeEnd backed by an asynchronous ZMQ socket.
