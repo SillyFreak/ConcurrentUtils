@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, Optional, Tuple
+from typing import cast, Any, Optional, Sequence, Tuple
 import asyncio
 import asyncio.locks
 
@@ -134,7 +134,7 @@ class ConcurrentPipeEnd(PipeEnd):
     Objects are transferred by reference; they are not pickled or otherwise serialized.
     """
 
-    def __init__(self, pipe_end, *, loop) -> None:
+    def __init__(self, pipe_end: PipeEnd, *, loop) -> None:
         super().__init__()
         self._pipe_end = pipe_end
         self._loop = loop
@@ -143,10 +143,13 @@ class ConcurrentPipeEnd(PipeEnd):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return await asyncio.wrap_future(future)
 
-    async def send(self, value=PipeEnd._none, *, eof=False):
+    def send_nowait(self, value: Any=PipeEnd._none, *, eof=False) -> None:
+        raise NotImplemented  # pragma: nocover
+
+    async def send(self, value=PipeEnd._none, *, eof=False) -> None:
         await self._run(self._pipe_end.send(value, eof=eof))
 
-    async def recv(self):
+    async def recv(self) -> Any:
         return await self._run(self._pipe_end.recv())
 
 
@@ -164,7 +167,7 @@ else:
         The synchronous `send_nowait` method and `request_sendnowait` are not supported.
         """
 
-        def __init__(self, ctx, socket_type, address, *, port, bind=False, serializer: Optional[Serializer]=None) -> None:
+        def __init__(self, ctx, socket_type, address: str, *, port: Optional[int], bind=False, serializer: Optional[Serializer]=None) -> None:
             super().__init__()
             if socket_type not in {zmq.DEALER, zmq.ROUTER, zmq.PAIR}:
                 raise ValueError("DEALER, ROUTER, or PAIR socket type required")
@@ -184,13 +187,13 @@ else:
                 else:
                     self._sock.connect(f'{address}:{port}')
             self.port = port
-            self._dealer_ident = None
+            self._dealer_ident: Optional[bytes] = None
 
-            self._serializer = serializer or Pickle()
+            self._serializer: Serializer = serializer or Pickle()
             self._eof_sent = False
             self._eof_recvd = False
 
-        async def initialize(self):
+        async def initialize(self) -> None:
             if self._socket_type == zmq.ROUTER:
                 self._dealer_ident, _ = await self._sock.recv_multipart()
             elif self._socket_type == zmq.DEALER:
@@ -198,24 +201,27 @@ else:
             else:
                 raise RuntimeError("initialize() not necessary for PAIR sockets")
 
-        async def _send(self, *parts):
+        async def _send(self, *parts: bytes) -> None:
             if self._socket_type == zmq.ROUTER:
-                parts = [self._dealer_ident, *parts]
+                parts = (cast(bytes, self._dealer_ident), *parts)
             await self._sock.send_multipart(parts)
 
-        async def _recv(self):
-            parts = await self._sock.recv_multipart()
+        async def _recv(self) -> Sequence[bytes]:
+            parts: Sequence[bytes] = await self._sock.recv_multipart()
             if self._socket_type == zmq.ROUTER:
                 parts = parts[1:]
             return parts
 
-        def _serialize(self, value):
+        def _serialize(self, value: Any) -> bytes:
             return self._serializer.serialize(value)
 
-        def _deserialize(self, msg):
+        def _deserialize(self, msg: bytes) -> Any:
             return self._serializer.deserialize(msg)
 
-        async def send(self, value=PipeEnd._none, *, eof=False):
+        def send_nowait(self, value: Any = PipeEnd._none, *, eof=False) -> None:
+            raise NotImplemented  # pragma: nocover
+
+        async def send(self, value: Any=PipeEnd._none, *, eof=False) -> None:
             if self._eof_sent:
                 raise EOFError("Cannot send after EOF")
             PipeEnd.check_send_args(value, eof=eof)
@@ -227,16 +233,16 @@ else:
                 msg = self._serialize(value)
                 await self._send(b'', msg)
 
-        async def recv(self):
+        async def recv(self) -> Any:
             if self._eof_recvd:
                 raise EOFError("Cannot receive after EOF")
 
-            msg = await self._recv()
-            if len(msg) == 1:
+            parts = await self._recv()
+            if len(parts) == 1:
                 self._eof_recvd = True
                 raise EOFError
             else:
-                _, msg = msg
+                _, msg = parts
                 return self._deserialize(msg)
 
 
