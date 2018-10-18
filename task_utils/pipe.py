@@ -238,13 +238,15 @@ else:
                 return self._deserialize(msg)
 
 
-    def zmq_tcp_pipe_end(ctx, side, *, port=0):
+    def zmq_tcp_pipe_end(ctx, side, *, host=None, port=0):
         if side == 'a':
-            return ZmqPipeEnd(ctx, zmq.DEALER, 'tcp://*', port=port, bind=True)
+            host = host or '*'
+            return ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port, bind=True)
         elif side == 'b':
+            host = host or '127.0.0.1'
             if port == 0:
                 raise ValueError("b side requires port argument")
-            return ZmqPipeEnd(ctx, zmq.ROUTER, 'tcp://127.0.0.1', port=port)
+            return ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
