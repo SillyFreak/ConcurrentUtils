@@ -238,39 +238,63 @@ else:
                 return self._deserialize(msg)
 
 
-    def zmq_tcp_pipe_end(ctx, side, *, host=None, port=0):
+    async def zmq_tcp_pipe_end(ctx, side, *, host=None, port=0, initialize=True):
+        """
+        Returns a `ZmqPipeEnd` backed by a TCP connection.
+        If both ends of the connection are created on the same thread/task,
+        it's necessary to pass `initialize=False` and then initialize manually,
+        to avoid a deadlock.
+        In that case, prefer `zmq_tcp_pipe` for creating both ends.
+        """
+
         if side == 'a':
             host = host or '*'
-            return ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port, bind=True)
+            result = ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port, bind=True)
         elif side == 'b':
             host = host or '127.0.0.1'
             if port == 0:
                 raise ValueError("b side requires port argument")
-            return ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port)
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
+        if initialize:
+            await result.initialize()
+        return result
+
 
     async def zmq_tcp_pipe(ctx, *, port=0):
-        a = zmq_tcp_pipe_end(ctx, 'a', port=port)
-        b = zmq_tcp_pipe_end(ctx, 'b', port=a.port)
+        a = await zmq_tcp_pipe_end(ctx, 'a', port=port, initialize=False)
+        b = await zmq_tcp_pipe_end(ctx, 'b', port=a.port, initialize=False)
         await a.initialize()
         await b.initialize()
         return a, b
 
 
-    def zmq_inproc_pipe_end(ctx, side, endpoint):
+    async def zmq_inproc_pipe_end(ctx, side, endpoint, *, initialize=True):
+        """
+        Returns a `ZmqPipeEnd` backed by an `inproc` connection; the endpoint must contain the scheme part.
+        If both ends of the connection are created on the same thread/task,
+        it's necessary to pass `initialize=False` and then initialize manually,
+        to avoid a deadlock.
+        In that case, prefer `zmq_inproc_pipe` for creating both ends.
+        """
+
         if side == 'a':
-            return ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None, bind=True)
+            result = ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None, bind=True)
         elif side == 'b':
-            return ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None)
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
+        if initialize:
+            await result.initialize()
+        return result
+
 
     async def zmq_inproc_pipe(ctx, endpoint):
-        a = zmq_inproc_pipe_end(ctx, 'a', endpoint)
-        b = zmq_inproc_pipe_end(ctx, 'b', endpoint)
+        a = await zmq_inproc_pipe_end(ctx, 'a', endpoint, initialize=False)
+        b = await zmq_inproc_pipe_end(ctx, 'b', endpoint, initialize=False)
         await a.initialize()
         await b.initialize()
         return a, b

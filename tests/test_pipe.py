@@ -93,30 +93,29 @@ async def test_zmq_tcp_pipe():
     ctx.destroy()
 
 
-def test_zmq_tcp_pipe_end_errors():
+@pytest.mark.asyncio
+async def test_zmq_tcp_pipe_end_errors():
     ctx = zmq.asyncio.Context()
 
     with pytest.raises(ValueError):
-        zmq_tcp_pipe_end(ctx, 'c')
+        await zmq_tcp_pipe_end(ctx, 'c')
 
     with pytest.raises(ValueError):
-        zmq_tcp_pipe_end(ctx, 'b')
+        await zmq_tcp_pipe_end(ctx, 'b')
 
 
 @pytest.mark.asyncio
 async def test_zmq_tcp_pipe_separate():
     async def task():
         ctx = zmq.asyncio.Context()
-        b = zmq_tcp_pipe_end(ctx, 'b', port=60123)
-        await b.initialize()
+        b = await zmq_tcp_pipe_end(ctx, 'b', port=60123)
         assert await b.recv() == "foo"
         ctx.destroy()
 
     task = asyncio.create_task(task())
 
     ctx = zmq.asyncio.Context()
-    a = zmq_tcp_pipe_end(ctx, 'a', port=60123)
-    await a.initialize()
+    a = await zmq_tcp_pipe_end(ctx, 'a', port=60123)
     await a.send("foo")
     ctx.destroy()
 
@@ -142,11 +141,12 @@ async def test_zmq_inproc_pipe():
     ctx.destroy()
 
 
-def test_zmq_inproc_pipe_end_errors():
+@pytest.mark.asyncio
+async def test_zmq_inproc_pipe_end_errors():
     ctx = zmq.asyncio.Context()
 
     with pytest.raises(ValueError):
-        zmq_inproc_pipe_end(ctx, 'c', 'inproc://pipe')
+        await zmq_inproc_pipe_end(ctx, 'c', 'inproc://pipe')
 
 
 @pytest.mark.asyncio
@@ -154,13 +154,13 @@ async def test_zmq_inproc_pipe_separate():
     ctx = zmq.asyncio.Context()
 
     async def task():
-        b = zmq_inproc_pipe_end(ctx, 'b', 'inproc://pipe')
-        await b.initialize()
+        b = await zmq_inproc_pipe_end(ctx, 'b', 'inproc://pipe')
         assert await b.recv() == "foo"
 
-    a = zmq_inproc_pipe_end(ctx, 'a', 'inproc://pipe')
+    a = await zmq_inproc_pipe_end(ctx, 'a', 'inproc://pipe', initialize=False)
     # bind must happen strictly before connect, so don't start task earlier:
     task = asyncio.create_task(task())
+    # can't initialize before connect is possible
     await a.initialize()
     await a.send("foo")
     await task
