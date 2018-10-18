@@ -1,7 +1,9 @@
 from abc import abstractmethod
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 import asyncio
 import asyncio.locks
+
+from .serializers import Serializer, Pickle
 
 
 __all__ = ['PipeEnd', 'Pipe', 'pipe', 'ConcurrentPipeEnd']
@@ -170,7 +172,7 @@ else:
         The synchronous `send_nowait` method is not supported.
         """
 
-        def __init__(self, ctx, socket_type, address, *, port, bind=False) -> None:
+        def __init__(self, ctx, socket_type, address, *, port, bind=False, serializer: Optional[Serializer]=None) -> None:
             super().__init__()
             if socket_type not in {zmq.DEALER, zmq.ROUTER}:
                 raise ValueError("DEALER or ROUTER socket type required")
@@ -192,6 +194,7 @@ else:
             self.port = port
             self._dealer_ident = None
 
+            self._serializer = serializer or Pickle()
             self._eof_sent = False
             self._eof_recvd = False
 
@@ -213,10 +216,10 @@ else:
             return parts
 
         def _serialize(self, value):
-            return pickle.dumps(value, pickle.DEFAULT_PROTOCOL)
+            return self._serializer.serialize(value)
 
         def _deserialize(self, msg):
-            return pickle.loads(msg)
+            return self._serializer.deserialize(msg)
 
         async def send(self, value=PipeEnd._none, *, eof=False):
             if self._eof_sent:
