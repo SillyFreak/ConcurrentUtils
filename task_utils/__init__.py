@@ -201,10 +201,8 @@ class Component(Generic[T]):
         try:
             return await self._events.recv()
         except EOFError:
-            # component has terminated, raise the cause
-            # either Success, Failure, or LifecycleError
-            self._future.result()
-            assert False  # pragma: nocover
+            # component has terminated, raise the cause (either Failure, or LifecycleError) or Success
+            raise Component.Success(self._future.result())
 
     def send_event_reply(self, value: Any) -> None:
         """\
@@ -216,11 +214,9 @@ class Component(Generic[T]):
 async def component_coro_wrapper(coro_func: CoroutineFunction,
                                  *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> None:
     try:
-        result = await coro_func(*args, commands=commands, events=events, **kwargs)
+        return await coro_func(*args, commands=commands, events=events, **kwargs)
     except Exception as err:
         raise Component.Failure(err) from None
-    else:
-        raise Component.Success(result)
     finally:
         try:
             events.send_nowait(eof=True)
