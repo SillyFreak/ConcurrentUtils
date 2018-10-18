@@ -159,9 +159,9 @@ else:
         """
         A PipeEnd backed by an asynchronous ZMQ socket.
         This PipeEnd can be used for multiprocessing; it will serialize objects that are transmitted.
-        The default serialization mechanism is pickle,
-        which can be customized by overriding the `_serialize` and `_deserialize` methods.
-        The synchronous `send_nowait` method is not supported.
+        The default serialization mechanism is pickle, which can be customized by providing a `Serializer`
+        or by overriding the `_serialize` and `_deserialize` methods.
+        The synchronous `send_nowait` method and `request_sendnowait` are not supported.
         """
 
         def __init__(self, ctx, socket_type, address, *, port, bind=False, serializer: Optional[Serializer]=None) -> None:
