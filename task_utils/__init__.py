@@ -13,83 +13,29 @@ CoroutineFunction = Callable[..., Awaitable[T]]
 
 class Component(Generic[T]):
     """\
-    A component encapsulates a task with pipes that allow for communication with the task's owner.
-    Pass a coroutine function and arguments to Component;
-    upon `start()` the coroutine function will be started as a task with two additional pipe arguments:
-    `commands` is for owner-initiated communication; `events` for task-initiated communication.
+    A component is a connection to a workload executed somewhere else.
+    Two pipes and a future are used for communication:
+    `commands` is for owner-initiated communication, `events` for task-initiated communication,
+    and the future is used to cancel the workload or get its result.
     Replies to commands are sent task-to-owner on the command pipe,
     and replies to events are sent owner-to-task on the event pipe;
     the reserved event `Component.EVENT_START` and command `Component.COMMAND_STOP` do not expect a reply.
 
-    The coroutine passed to Component is required to show the following behavior:
+    The workload is required to show the following behavior:
+
     - it must send `Component.EVENT_START` to its owner after the task is initialized;
-    - it must not send EOF on the event pipe;
+    - it must send EOF on the event pipe before terminating, and not earlier;
+    - it should wrap any raised exception in `Component.Failure`,
+      or raise `Component.LifecycleError` for violations of this contract;
     - when `Component.COMMAND_STOP` is received, it should either stop eventually, or send an event to its owner;
-    - when the task is cancelled, it should either stop eventually, or send an event to its owner.
+    - when the future is cancelled, it should either stop eventually, or send an event to its owner.
 
-    The latter two are soft requirements and only rule out the Component running forever
+    The latter three are soft requirements, with the last two only ruling out the workload running forever
     without ever sending an event after a stop/cancellation request.
-    A component may choose to ignore stop commands or cancellations, but should document if it does.
-
-    A simple example. Note that here, the component is exclusively reacting to commands,
-    and the owner waits for acknowledgements to its commands, making the order of outputs predictable.
-
-    >>> async def component(msg, *, commands, events):
-    ...     # do any startup tasks here
-    ...     print("> component starting up...")
-    ...     events.send_nowait(Component.EVENT_START)
-    ...
-    ...     count = 0
-    ...     while True:
-    ...         command = await commands.recv()
-    ...         if command == Component.COMMAND_STOP:
-    ...             # honor stop commands
-    ...             break
-    ...         elif command == 'ECHO':
-    ...             print(f"> {msg}")
-    ...             count += 1
-    ...             # acknowledge the command was serviced completely
-    ...             commands.send_nowait(None)
-    ...         else:
-    ...             # unknown command; terminate
-    ...             # by closing the commands pipe,
-    ...             # the caller (if waiting for a reply) will receive an EOFError
-    ...             commands.send_nowait(eof=True)
-    ...             raise ValueError
-    ...
-    ...     # do any cleanup tasks here, probably in a finally block
-    ...     print("> component cleaning up...")
-    ...     return count
-    ...
-    >>> async def example():
-    ...     print("call start")
-    ...     comp = await start_component(component, "Hello World")
-    ...     print("done")
-    ...
-    ...     print("send command")
-    ...     await comp.request('ECHO')
-    ...     print("done")
-    ...
-    ...     print("call stop")
-    ...     count = await comp.stop()
-    ...     print("done")
-    ...
-    ...     print(count)
-    ...
-    >>> asyncio.run(example())
-    call start
-    > component starting up...
-    done
-    send command
-    > Hello World
-    done
-    call stop
-    > component cleaning up...
-    done
-    1
+    A workload may choose to ignore stop commands or cancellations, but should document if it does.
     """
 
-    class LifecycleError(Exception): pass
+    class LifecycleError(RuntimeError): pass
     class Success(Exception): pass
     class Failure(Exception): pass
     class EventException(Exception): pass
@@ -213,6 +159,17 @@ class Component(Generic[T]):
 
 async def component_coro_wrapper(coro_func: CoroutineFunction,
                                  *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> None:
+    """\
+    This function wraps a component workload to conform to the required lifecycle.
+    The following behavior is the passed coroutine function's responsibility:
+
+    - it must send `Component.EVENT_START` to its owner after the task is initialized;
+    - it must not send EOF on the event pipe;
+    - when `Component.COMMAND_STOP` is received, it should either stop eventually, or send an event to its owner;
+    - when it is cancelled, it should either stop eventually, or send an event to its owner.
+
+    Also, any `Component.LifecycleError` raised will be wrapped in `Component.Failure`.
+    """
     try:
         return await coro_func(*args, commands=commands, events=events, **kwargs)
     except Exception as err:
@@ -225,6 +182,67 @@ async def component_coro_wrapper(coro_func: CoroutineFunction,
 
 
 async def start_component(coro_func: CoroutineFunction, *args: Any, **kwargs: Any) -> Component:
+    """\
+    Starts the passed `coro_func` as a component workload with additional `commands` and `events` pipes.
+    The workload will be executed as a task.
+
+    A simple example. Note that here, the component is exclusively reacting to commands,
+    and the owner waits for acknowledgements to its commands, making the order of outputs predictable.
+
+    >>> async def component(msg, *, commands, events):
+    ...     # do any startup tasks here
+    ...     print("> component starting up...")
+    ...     events.send_nowait(Component.EVENT_START)
+    ...
+    ...     count = 0
+    ...     while True:
+    ...         command = await commands.recv()
+    ...         if command == Component.COMMAND_STOP:
+    ...             # honor stop commands
+    ...             break
+    ...         elif command == 'ECHO':
+    ...             print(f"> {msg}")
+    ...             count += 1
+    ...             # acknowledge the command was serviced completely
+    ...             commands.send_nowait(None)
+    ...         else:
+    ...             # unknown command; terminate
+    ...             # by closing the commands pipe,
+    ...             # the caller (if waiting for a reply) will receive an EOFError
+    ...             commands.send_nowait(eof=True)
+    ...             raise ValueError
+    ...
+    ...     # do any cleanup tasks here, probably in a finally block
+    ...     print("> component cleaning up...")
+    ...     return count
+    ...
+    >>> async def example():
+    ...     print("call start")
+    ...     comp = await start_component(component, "Hello World")
+    ...     print("done")
+    ...
+    ...     print("send command")
+    ...     await comp.request('ECHO')
+    ...     print("done")
+    ...
+    ...     print("call stop")
+    ...     count = await comp.stop()
+    ...     print("done")
+    ...
+    ...     print(count)
+    ...
+    >>> asyncio.run(example())
+    call start
+    > component starting up...
+    done
+    send command
+    > Hello World
+    done
+    call stop
+    > component cleaning up...
+    done
+    1
+    """
     commands_a, commands_b = pipe()
     events_a, events_b = pipe()
 
