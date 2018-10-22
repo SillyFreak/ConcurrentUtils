@@ -311,7 +311,7 @@ else:
                 return self._deserialize(msg)
 
 
-    async def zmq_tcp_pipe_end(ctx, side, *, host=None, port=0, initialize=True):
+    async def zmq_tcp_pipe_end(ctx, side, *, host=None, port=0, serializer: Optional[Serializer]=None, initialize=True):
         """
         Returns a `ZmqPipeEnd` backed by a TCP connection.
         If both ends of the connection are created on the same thread/task, to avoid a deadlock,
@@ -329,12 +329,12 @@ else:
 
         if side == 'a':
             host = host or '*'
-            result = ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port, bind=True)
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port, bind=True, serializer=serializer)
         elif side == 'b':
             host = host or '127.0.0.1'
             if port == 0:
                 raise ValueError("b side requires port argument")
-            result = ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port)
+            result = ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port, serializer=serializer)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
@@ -343,14 +343,14 @@ else:
         return result
 
 
-    async def zmq_tcp_pipe(ctx, *, port=0):
-        a = await zmq_tcp_pipe_end(ctx, 'a', port=port, initialize=False)
-        b = await zmq_tcp_pipe_end(ctx, 'b', port=a.port)
+    async def zmq_tcp_pipe(ctx, *, port=0, serializer: Optional[Serializer]=None):
+        a = await zmq_tcp_pipe_end(ctx, 'a', port=port, serializer=serializer, initialize=False)
+        b = await zmq_tcp_pipe_end(ctx, 'b', port=a.port, serializer=serializer)
         await a.initialize()
         return a, b
 
 
-    async def zmq_ipc_pipe_end(ctx, side, endpoint, *, initialize=True):
+    async def zmq_ipc_pipe_end(ctx, side, endpoint, *, serializer: Optional[Serializer]=None, initialize=True):
         """
         Returns a `ZmqPipeEnd` backed by an `ipc` connection; the endpoint must contain the scheme part.
         If both ends of the connection are created on the same thread/task, to avoid a deadlock,
@@ -367,9 +367,9 @@ else:
         """
 
         if side == 'a':
-            result = ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None, bind=True)
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None, bind=True, serializer=serializer)
         elif side == 'b':
-            result = ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None)
+            result = ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None, serializer=serializer)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
@@ -378,14 +378,14 @@ else:
         return result
 
 
-    async def zmq_ipc_pipe(ctx, endpoint):
-        a = await zmq_ipc_pipe_end(ctx, 'a', endpoint, initialize=False)
-        b = await zmq_ipc_pipe_end(ctx, 'b', endpoint)
+    async def zmq_ipc_pipe(ctx, endpoint, *, serializer: Optional[Serializer]=None):
+        a = await zmq_ipc_pipe_end(ctx, 'a', endpoint, serializer=serializer, initialize=False)
+        b = await zmq_ipc_pipe_end(ctx, 'b', endpoint, serializer=serializer)
         await a.initialize()
         return a, b
 
 
-    def zmq_inproc_pipe_end(ctx, side, endpoint=None):
+    def zmq_inproc_pipe_end(ctx, side, endpoint=None, *, serializer: Optional[Serializer]=None):
         """
         Returns a `ZmqPipeEnd` backed by an `inproc` connection; the endpoint must contain the scheme part.
         The inproc transport uses `PAIR` sockets, not requiring `initialize()`.
@@ -396,7 +396,7 @@ else:
 
         if side == 'a':
             if endpoint is not None:
-                return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None, bind=True)
+                return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None, bind=True, serializer=serializer)
 
             for i in range(100):
                 endpoint = f'inproc://pipe-{random.randrange(2**32):#010x}'
@@ -409,12 +409,12 @@ else:
         elif side == 'b':
             if endpoint is None:
                 raise ValueError("b side requires endpoint argument")
-            return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None)
+            return ZmqPipeEnd(ctx, zmq.PAIR, endpoint, port=None, serializer=serializer)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
 
-    def zmq_inproc_pipe(ctx, endpoint=None):
-        a = zmq_inproc_pipe_end(ctx, 'a', endpoint)
-        b = zmq_inproc_pipe_end(ctx, 'b', a.endpoint)
+    def zmq_inproc_pipe(ctx, endpoint=None, *, serializer: Optional[Serializer]=None):
+        a = zmq_inproc_pipe_end(ctx, 'a', endpoint, serializer=serializer)
+        b = zmq_inproc_pipe_end(ctx, 'b', a.endpoint, serializer=serializer)
         return a, b
