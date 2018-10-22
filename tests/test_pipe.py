@@ -3,7 +3,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import zmq.asyncio
 
-from task_utils.pipe import pipe, ConcurrentPipeEnd, ZmqPipeEnd, \
+from concurrent_utils.pipe import pipe, ConcurrentPipeEnd, ZmqPipeEnd, \
     zmq_tcp_pipe, zmq_tcp_pipe_end, zmq_ipc_pipe, zmq_ipc_pipe_end, zmq_inproc_pipe, zmq_inproc_pipe_end
 
 

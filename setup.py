@@ -18,9 +18,9 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='task-utils',
+    name='concurrent-utils',
     version='0.0.0',
-    description='task-utils',
+    description='concurrent-utils',
     long_description=long_description,
     # url="https://github.com/Foo/foo",
     author="Clemens Koza",

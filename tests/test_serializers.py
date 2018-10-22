@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import dataclass
 
-from task_utils.serializers import Pickle, Msgpack
+from concurrent_utils.serializers import Pickle, Msgpack
 
 
 @dataclass

@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
-from task_utils.component import Component, component_workload, start_component, start_component_in_thread, start_component_in_process
+from concurrent_utils.component import Component, component_workload, start_component, start_component_in_thread, start_component_in_process
 
 
 @pytest.mark.asyncio
