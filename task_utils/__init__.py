@@ -12,6 +12,10 @@ T = TypeVar('T')
 CoroutineFunction = Callable[..., Awaitable[T]]
 
 
+# TODO asyncio.Future is not generic, but Awaitable[T] doesn't have cancel()
+_Future = Awaitable[T]
+
+
 class Component(Generic[T]):
     """\
     A component is a connection to a workload executed somewhere else.
@@ -44,7 +48,7 @@ class Component(Generic[T]):
     EVENT_START = 'EVENT_START'
     COMMAND_STOP = 'COMMAND_STOP'
 
-    def __init__(self, commands: PipeEnd, events: PipeEnd, future: asyncio.Future) -> None:
+    def __init__(self, commands: PipeEnd, events: PipeEnd, future: _Future[T]) -> None:
         self._commands = commands
         self._events = events
         self._future = future
@@ -92,7 +96,7 @@ class Component(Generic[T]):
         Cancelling raises a `CancelledError` into the task, which will normally terminate it.
         It is a forced method of shutdown, and only requires the component to not actively ignore cancellations.
         """
-        self._future.cancel()
+        cast(asyncio.Future, self._future).cancel()
 
     async def cancel(self) -> T:
         """\
@@ -159,8 +163,8 @@ class Component(Generic[T]):
         await self._events.send(value)
 
 
-async def component_coro_wrapper(coro_func: CoroutineFunction,
-                                 *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> None:
+async def component_coro_wrapper(coro_func: CoroutineFunction[T],
+                                 *args: Any, commands: PipeEnd, events: PipeEnd, **kwargs: Any) -> T:
     """\
     This function wraps a component workload to conform to the required lifecycle.
     The following behavior is the passed coroutine function's responsibility:
@@ -183,11 +187,11 @@ async def component_coro_wrapper(coro_func: CoroutineFunction,
             raise Component.LifecycleError("component closed events pipe manually") from err
 
 
-def component_workload(coro_func):
+def component_workload(coro_func: CoroutineFunction[T]) -> CoroutineFunction[T]:
     return functools.partial(component_coro_wrapper, coro_func)
 
 
-async def start_component(workload: CoroutineFunction, *args: Any, **kwargs: Any) -> Component:
+async def start_component(workload: CoroutineFunction[T], *args: Any, **kwargs: Any) -> Component[T]:
     """\
     Starts the passed `coro_func` as a component workload with additional `commands` and `events` pipes.
     The workload will be executed as a task.
@@ -256,12 +260,12 @@ async def start_component(workload: CoroutineFunction, *args: Any, **kwargs: Any
 
     task = asyncio.create_task(workload(*args, commands=commands_b, events=events_b, **kwargs))
 
-    component = Component(commands_a, events_a, task)
+    component = Component[T](commands_a, events_a, task)
     await component.wait_for_start()
     return component
 
 
-async def start_component_in_thread(executor, workload: CoroutineFunction, *args: Any, loop=None, **kwargs: Any) -> Component:
+async def start_component_in_thread(executor, workload: CoroutineFunction[T], *args: Any, loop=None, **kwargs: Any) -> Component[T]:
     loop = loop or asyncio.get_event_loop()
 
     commands_a, commands_b = pipe(loop=loop)
@@ -270,9 +274,10 @@ async def start_component_in_thread(executor, workload: CoroutineFunction, *args
     commands_b = ConcurrentPipeEnd(commands_b, loop=loop)
     events_b = ConcurrentPipeEnd(events_b, loop=loop)
 
-    future = loop.run_in_executor(executor, asyncio.run, workload(*args, commands=commands_b, events=events_b, **kwargs))
+    _workload = workload(*args, commands=commands_b, events=events_b, **kwargs)
+    future = cast(_Future[T], loop.run_in_executor(executor, asyncio.run, _workload))
 
-    component = Component(commands_a, events_a, cast(asyncio.Future, future))
+    component = Component[T](commands_a, events_a, future)
     await component.wait_for_start()
     return component
 
@@ -284,8 +289,8 @@ except:  # pragma: nocover
     pass
 else:
     # we need a top level function wrapper that can be pickled for transfer to the new process
-    def _process_workload_wrapper(workload: CoroutineFunction, *args: Any, commands_port, events_port, **kwargs: Any):
-        async def _workload():
+    def _process_workload_wrapper(workload: CoroutineFunction[T], *args: Any, commands_port: int, events_port: int, **kwargs: Any) -> T:
+        async def _workload() -> T:
             ctx = zmq.asyncio.Context()
             commands = await zmq_tcp_pipe_end(ctx, 'b', port=commands_port)
             events = await zmq_tcp_pipe_end(ctx, 'b', port=events_port)
@@ -295,18 +300,21 @@ else:
         return asyncio.run(_workload())
 
 
-    async def start_component_in_process(executor, ctx, workload: CoroutineFunction, *args: Any, loop=None, **kwargs: Any) -> Component:
+    async def start_component_in_process(executor, ctx, workload: CoroutineFunction[T], *args: Any, loop=None, **kwargs: Any) -> Component[T]:
         loop = loop or asyncio.get_event_loop()
 
-        async def starter(commands_port, events_port):
+        async def starter(commands_port: int, events_port: int) -> _Future[T]:
             _workload = functools.partial(_process_workload_wrapper, workload, *args,
                                           commands_port=commands_port, events_port=events_port, **kwargs)
-            return loop.run_in_executor(executor, _workload)
+            return cast(_Future[T], loop.run_in_executor(executor, _workload))
 
         return await start_external_component(ctx, starter)
 
 
-    async def start_external_component(ctx, starter):
+    StarterFunction = Callable[[int, int], Awaitable[_Future[T]]]
+
+
+    async def start_external_component(ctx, starter: StarterFunction) -> Component[T]:
         ctx = ctx or zmq.asyncio.Context()
         commands = await zmq_tcp_pipe_end(ctx, 'a', initialize=False)
         events = await zmq_tcp_pipe_end(ctx, 'a', initialize=False)
@@ -314,6 +322,6 @@ else:
         await commands.initialize()
         await events.initialize()
 
-        component = Component(commands, events, cast(asyncio.Future, future))
+        component = Component[T](commands, events, future)
         await component.wait_for_start()
         return component
