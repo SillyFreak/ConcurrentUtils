@@ -298,13 +298,19 @@ else:
     async def start_component_in_process(executor, ctx, workload: CoroutineFunction, *args: Any, loop=None, **kwargs: Any) -> Component:
         loop = loop or asyncio.get_event_loop()
 
+        async def starter(commands_port, events_port):
+            _workload = functools.partial(_process_workload_wrapper, workload, *args,
+                                          commands_port=commands_port, events_port=events_port, **kwargs)
+            return loop.run_in_executor(executor, _workload)
+
+        return await start_external_component(ctx, starter)
+
+
+    async def start_external_component(ctx, starter):
         ctx = ctx or zmq.asyncio.Context()
         commands = await zmq_tcp_pipe_end(ctx, 'a', initialize=False)
         events = await zmq_tcp_pipe_end(ctx, 'a', initialize=False)
-
-        future = loop.run_in_executor(executor, functools.partial(_process_workload_wrapper, workload, *args,
-                                                                  commands_port=commands.port, events_port=events.port,
-                                                                  **kwargs))
+        future = await starter(commands.port, events.port)
         await commands.initialize()
         await events.initialize()
 
