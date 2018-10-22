@@ -1,7 +1,9 @@
 import pytest
 import asyncio
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+import zmq.asyncio
 
-from task_utils import Component, component_workload, start_component
+from task_utils import Component, component_workload, start_component, start_component_in_thread, start_component_in_process
 
 
 @pytest.mark.asyncio
@@ -349,3 +351,51 @@ async def test_component_manual_eof_event():
 
     with pytest.raises(Component.LifecycleError):
         await comp.stop()
+
+
+@pytest.mark.asyncio
+async def test_thread_component_result_success_and_command():
+    @component_workload
+    async def component(x, *, commands, events):
+        await events.send(Component.EVENT_START)
+        ### startup complete
+
+        # reply to command
+        await commands.send(await commands.recv() + 1)
+
+        # return
+        return x
+
+    e = ThreadPoolExecutor(1)
+    comp = await start_component_in_thread(e, component, 1)
+
+    assert await comp.request(1) == 2
+
+    assert await comp.result() == 1
+
+
+# decorating the function would prevent pickling it
+async def _test_process_component_result_success_and_command_workload(*args, **kwargs):
+    @component_workload
+    async def component(x, *, commands, events):
+        await events.send(Component.EVENT_START)
+        ### startup complete
+
+        # reply to command
+        await commands.send(await commands.recv() + 1)
+
+        # return
+        return x
+
+    return await component(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_process_component_result_success_and_command():
+
+    e = ProcessPoolExecutor(1)
+    comp = await start_component_in_process(e, None, _test_process_component_result_success_and_command_workload, 1)
+
+    assert await comp.request(1) == 2
+
+    assert await comp.result() == 1

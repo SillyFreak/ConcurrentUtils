@@ -259,3 +259,55 @@ async def start_component(workload: CoroutineFunction, *args: Any, **kwargs: Any
     component = Component(commands_a, events_a, task)
     await component.wait_for_start()
     return component
+
+
+async def start_component_in_thread(executor, workload: CoroutineFunction, *args: Any, loop=None, **kwargs: Any) -> Component:
+    loop = loop or asyncio.get_event_loop()
+
+    commands_a, commands_b = pipe(loop=loop)
+    events_a, events_b = pipe(loop=loop)
+
+    commands_b = ConcurrentPipeEnd(commands_b, loop=loop)
+    events_b = ConcurrentPipeEnd(events_b, loop=loop)
+
+    future = loop.run_in_executor(executor, asyncio.run, workload(*args, commands=commands_b, events=events_b, **kwargs))
+
+    component = Component(commands_a, events_a, cast(asyncio.Future, future))
+    await component.wait_for_start()
+    return component
+
+
+try:
+    import zmq.asyncio
+    from .pipe import zmq_tcp_pipe_end
+except:  # pragma: nocover
+    pass
+else:
+    # we need a top level function wrapper that can be pickled for transfer to the new process
+    def _process_workload_wrapper(workload: CoroutineFunction, *args: Any, commands_port, events_port, **kwargs: Any):
+        async def _workload():
+            ctx = zmq.asyncio.Context()
+            commands = await zmq_tcp_pipe_end(ctx, 'b', port=commands_port)
+            events = await zmq_tcp_pipe_end(ctx, 'b', port=events_port)
+
+            return await workload(*args, commands=commands, events=events, **kwargs)
+
+        return asyncio.run(_workload())
+
+
+    async def start_component_in_process(executor, ctx, workload: CoroutineFunction, *args: Any, loop=None, **kwargs: Any) -> Component:
+        loop = loop or asyncio.get_event_loop()
+
+        ctx = ctx or zmq.asyncio.Context()
+        commands = await zmq_tcp_pipe_end(ctx, 'a', initialize=False)
+        events = await zmq_tcp_pipe_end(ctx, 'a', initialize=False)
+
+        future = loop.run_in_executor(executor, functools.partial(_process_workload_wrapper, workload, *args,
+                                                                  commands_port=commands.port, events_port=events.port,
+                                                                  **kwargs))
+        await commands.initialize()
+        await events.initialize()
+
+        component = Component(commands, events, cast(asyncio.Future, future))
+        await component.wait_for_start()
+        return component
