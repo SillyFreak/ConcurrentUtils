@@ -182,9 +182,45 @@ else:
         The default serialization mechanism is pickle, which can be customized by providing a `Serializer`
         or by overriding the `_serialize` and `_deserialize` methods.
         The synchronous `send_nowait` method and `request_sendnowait` are not supported.
+
+        The sockets connected can be either `DEALER` and `ROUTER` or `PAIR` and `PAIR`.
+        Additional sockets must not be connected to the used endpoints.
+        For `DEALER`/`ROUTER` connections, the `initialize` method must be called to tell the `ROUTER` socket
+        the `DEALER`'s identity.
+        Care must be taken when creating both pipe ends synchronously:
+        `initialize` will block before the sockets established a connection, i.e. this will cause a deadlock:
+
+        - create & initialize pipe end `'a'`
+        - create & initialize pipe end `'b'`
+
+        instead the following is necessary:
+
+        - create pipe ends `'a'` & `'b'`
+        - initialize pipe ends `'a'` & `'b'`
+
+        For `PAIR`/`PAIR` connections, `initialize` must not be called.
+        `PAIR`/`PAIR` connections are a little more efficient in terms of framing,
+        but should only be used over the `inproc` transport, as recommended by ZeroMQ.
         """
 
         def __init__(self, ctx, socket_type, address: str, *, port: Optional[int], bind=False, serializer: Optional[Serializer]=None) -> None:
+            """\
+            Creates a ZMQ-socket based pipe end; see the parameters on how a connection is established.
+            For `DEALER` and `ROUTER` sockets, `initialize` must be called before the pipe end is complete.
+
+            A `port` of `0` is only valid if `bind` is `True`,
+            in which case `bind_to_random_port(address)` will be used for binding.
+
+            After creation, the `port` and `endpoint` properties will contain the ultimately used values.
+
+            :param ctx: the async ZMQ context to get sockets from
+            :param socket_type: the socket type; one of `DEALER`, `ROUTER`, `PAIR`
+            :param address: the ZMQ endpoint address; without port for the TCP transport
+            :param port: the TCP port to use or zero to bind to a random port; `None` for non-TCP transports
+            :param bind: whether to bind or to connect the socket to the given address; defaults to `False` (connect)
+            :param serializer: the serializer used to pack values into ZMQ messages; defaults to `serializers.Pickle`
+            """
+
             super().__init__()
             if socket_type not in {zmq.DEALER, zmq.ROUTER, zmq.PAIR}:
                 raise ValueError("DEALER, ROUTER, or PAIR socket type required")
@@ -217,6 +253,12 @@ else:
             self._eof_recvd = False
 
         async def initialize(self) -> None:
+            """\
+            Initializes a `DEALER`/`ROUTER` based connection.
+            The DEALER side will send a `[b'']` message;
+            the router side will receive it and store the received identifier for sending messages later.
+            """
+
             if self._socket_type == zmq.ROUTER:
                 self._dealer_ident, _ = await self._sock.recv_multipart()
             elif self._socket_type == zmq.DEALER:
@@ -276,6 +318,9 @@ else:
         it's necessary to pass `initialize=False` and then initialize manually,
         to avoid a deadlock.
         In that case, prefer `zmq_tcp_pipe` for creating both ends.
+
+        Side `'a'` will bind a `DEALER` socket on the given or a random port (host defaults to `*`);
+        side `'b'` will connect a `ROUTER` socket to the given port (host defaults to `127.0.0.1`).
         """
 
         if side == 'a':
@@ -309,6 +354,9 @@ else:
         it's necessary to pass `initialize=False` and then initialize manually,
         to avoid a deadlock.
         In that case, prefer `zmq_ipc_pipe` for creating both ends.
+
+        Side `'a'` will bind a `DEALER` socket on the given endpoint;
+        side `'b'` will connect a `ROUTER` socket to the given endpoint.
         """
 
         if side == 'a':
@@ -334,7 +382,10 @@ else:
     def zmq_inproc_pipe_end(ctx, side, endpoint=None):
         """
         Returns a `ZmqPipeEnd` backed by an `inproc` connection; the endpoint must contain the scheme part.
-        The inproc transport uses PAIR sockets, not requiring `initialize()`.
+        The inproc transport uses `PAIR` sockets, not requiring `initialize()`.
+
+        Side `'a'` will bind a `PAIR` socket on the given or a random endpoint;
+        side `'b'` will connect a `PAIR` socket to the given endpoint.
         """
 
         if side == 'a':
