@@ -5,7 +5,13 @@ import functools
 from .pipe import pipe, PipeEnd, ConcurrentPipeEnd
 
 
-__all__ = ['Component']
+__all__ = [
+    'Component',
+    'component_coro_wrapper',
+    'component_workload',
+    'start_component',
+    'start_component_in_thread',
+]
 
 
 T = TypeVar('T')
@@ -316,6 +322,13 @@ try:
 except:  # pragma: nocover
     pass
 else:
+    __all__ += [
+        'start_component_in_process',
+        'start_external_component',
+        'StarterFunction',
+    ]
+
+
     # we need a top level function wrapper that can be pickled for transfer to the new process
     def _process_workload_wrapper(workload: CoroutineFunction[T], *args: Any, commands_port: int, events_port: int, **kwargs: Any) -> T:
         async def _workload() -> T:

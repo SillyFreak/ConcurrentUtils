@@ -3,6 +3,12 @@ from abc import abstractmethod
 from typing import cast, Any, Dict, Optional
 
 
+__all__ = [
+    'Serializer',
+    'Pickle',
+]
+
+
 class Serializer:
     @abstractmethod
     def serialize(self, value: Any) -> bytes:
@@ -38,6 +44,11 @@ try:
 except:  # pragma: nocover
     pass
 else:
+    __all__ += [
+        'Msgpack',
+    ]
+
+
     class Msgpack(Serializer):
         def __init__(self, pack_kwargs: Optional[Dict[str, Any]]=None, unpack_kwargs: Optional[Dict[str, Any]]=None) -> None:
             self.pack_kwargs = pack_kwargs or dict(use_bin_type=True)

@@ -7,7 +7,12 @@ import random
 from .serializers import Serializer, Pickle
 
 
-__all__ = ['PipeEnd', 'Pipe', 'pipe', 'ConcurrentPipeEnd']
+__all__ = [
+    'PipeEnd',
+    'Pipe',
+    'pipe',
+    'ConcurrentPipeEnd',
+]
 
 
 class PipeEnd:
@@ -159,6 +164,17 @@ try:
 except:  # pragma: nocover
     pass
 else:
+    __all__ += [
+        'ZmqPipeEnd',
+        'zmq_tcp_pipe_end',
+        'zmq_tcp_pipe',
+        'zmq_ipc_pipe_end',
+        'zmq_ipc_pipe',
+        'zmq_inproc_pipe_end',
+        'zmq_inproc_pipe',
+    ]
+
+
     class ZmqPipeEnd(PipeEnd):
         """
         A PipeEnd backed by an asynchronous ZMQ socket.
