@@ -314,23 +314,27 @@ else:
     async def zmq_tcp_pipe_end(ctx, side, *, host=None, port=0, initialize=True):
         """
         Returns a `ZmqPipeEnd` backed by a TCP connection.
-        If both ends of the connection are created on the same thread/task,
-        it's necessary to pass `initialize=False` and then initialize manually,
-        to avoid a deadlock.
+        If both ends of the connection are created on the same thread/task, to avoid a deadlock,
+        it's necessary to first create both ends, then initialize `'b'` then `'a'`, such as this:
+
+            a = await zmq_tcp_pipe_end(ctx, 'a', port=port, initialize=False)
+            b = await zmq_tcp_pipe_end(ctx, 'b', port=a.port)
+            await a.initialize()
+
         In that case, prefer `zmq_tcp_pipe` for creating both ends.
 
-        Side `'a'` will bind a `DEALER` socket on the given or a random port (host defaults to `*`);
-        side `'b'` will connect a `ROUTER` socket to the given port (host defaults to `127.0.0.1`).
+        Side `'a'` will bind a `ROUTER` socket on the given or a random port (host defaults to `*`);
+        side `'b'` will connect a `DEALER` socket to the given port (host defaults to `127.0.0.1`).
         """
 
         if side == 'a':
             host = host or '*'
-            result = ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port, bind=True)
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port, bind=True)
         elif side == 'b':
             host = host or '127.0.0.1'
             if port == 0:
                 raise ValueError("b side requires port argument")
-            result = ZmqPipeEnd(ctx, zmq.ROUTER, f'tcp://{host}', port=port)
+            result = ZmqPipeEnd(ctx, zmq.DEALER, f'tcp://{host}', port=port)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
@@ -341,28 +345,31 @@ else:
 
     async def zmq_tcp_pipe(ctx, *, port=0):
         a = await zmq_tcp_pipe_end(ctx, 'a', port=port, initialize=False)
-        b = await zmq_tcp_pipe_end(ctx, 'b', port=a.port, initialize=False)
+        b = await zmq_tcp_pipe_end(ctx, 'b', port=a.port)
         await a.initialize()
-        await b.initialize()
         return a, b
 
 
     async def zmq_ipc_pipe_end(ctx, side, endpoint, *, initialize=True):
         """
         Returns a `ZmqPipeEnd` backed by an `ipc` connection; the endpoint must contain the scheme part.
-        If both ends of the connection are created on the same thread/task,
-        it's necessary to pass `initialize=False` and then initialize manually,
-        to avoid a deadlock.
+        If both ends of the connection are created on the same thread/task, to avoid a deadlock,
+        it's necessary to first create both ends, then initialize `'b'` then `'a'`, such as this:
+
+            a = await zmq_ipc_pipe_end(ctx, 'a', endpoint, initialize=False)
+            b = await zmq_ipc_pipe_end(ctx, 'b', endpoint)
+            await a.initialize()
+
         In that case, prefer `zmq_ipc_pipe` for creating both ends.
 
-        Side `'a'` will bind a `DEALER` socket on the given endpoint;
-        side `'b'` will connect a `ROUTER` socket to the given endpoint.
+        Side `'a'` will bind a `ROUTER` socket on the given endpoint;
+        side `'b'` will connect a `DEALER` socket to the given endpoint.
         """
 
         if side == 'a':
-            result = ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None, bind=True)
+            result = ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None, bind=True)
         elif side == 'b':
-            result = ZmqPipeEnd(ctx, zmq.ROUTER, endpoint, port=None)
+            result = ZmqPipeEnd(ctx, zmq.DEALER, endpoint, port=None)
         else:
             raise ValueError("side must be 'a' or 'b'")
 
@@ -373,9 +380,8 @@ else:
 
     async def zmq_ipc_pipe(ctx, endpoint):
         a = await zmq_ipc_pipe_end(ctx, 'a', endpoint, initialize=False)
-        b = await zmq_ipc_pipe_end(ctx, 'b', endpoint, initialize=False)
+        b = await zmq_ipc_pipe_end(ctx, 'b', endpoint)
         await a.initialize()
-        await b.initialize()
         return a, b
 
 
