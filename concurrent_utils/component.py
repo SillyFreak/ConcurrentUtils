@@ -328,6 +328,8 @@ else:
         'StarterFunction',
     ]
 
+    StarterFunction = Callable[[int, int], Awaitable[_Future[T]]]
+
 
     # we need a top level function wrapper that can be pickled for transfer to the new process
     def _process_workload_wrapper(workload: CoroutineFunction[T], *args: Any, commands_port: int, events_port: int, **kwargs: Any) -> T:
@@ -364,9 +366,6 @@ else:
             return cast(_Future[T], loop.run_in_executor(executor, _workload))
 
         return await start_external_component(ctx, starter)
-
-
-    StarterFunction = Callable[[int, int], Awaitable[_Future[T]]]
 
 
     async def start_external_component(ctx, starter: StarterFunction) -> Component[T]:
