@@ -1,6 +1,8 @@
 Concurrent Utils
 ================
 
+.. image:: https://travis-ci.org/SillyFreak/ConcurrentUtils.svg?branch=master
+
 Concurrency utilities for Python 3.7 + asyncio; the main portion is a component abstraction.
 To support this, some pipe implementations for inter-task, inter-thread, and inter-process communication
 and some serialization utilities are provided as well. Inter-process communication is based on ZeroMQ.
