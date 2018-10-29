@@ -22,14 +22,14 @@ setup(
     version='0.0.0',
     description='concurrent-utils',
     long_description=long_description,
-    # url="https://github.com/Foo/foo",
+    url="https://github.com/SillyFreak/ConcurrentUtils",
     author="Clemens Koza",
     author_email="koza@pria.at",
     license="AGPLv3+",
 
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Topic :: Software Development',
         'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
@@ -37,7 +37,7 @@ setup(
         'Programming Language :: Python :: 3.7',
     ],
 
-    keywords='asyncio',
+    keywords='asyncio concurrency',
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
