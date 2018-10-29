@@ -2,6 +2,10 @@ Concurrent Utils
 ================
 
 .. image:: https://travis-ci.org/SillyFreak/ConcurrentUtils.svg?branch=master
+    :target: https://travis-ci.org/SillyFreak/ConcurrentUtils
+.. image:: https://coveralls.io/repos/github/SillyFreak/ConcurrentUtils/badge.svg?branch=master
+    :target: https://coveralls.io/github/SillyFreak/ConcurrentUtils?branch=master
+
 
 Concurrency utilities for Python 3.7 + asyncio; the main portion is a component abstraction.
 To support this, some pipe implementations for inter-task, inter-thread, and inter-process communication
