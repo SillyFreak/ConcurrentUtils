@@ -18,7 +18,9 @@ Develop: |travis-develop|_ |coveralls-develop|_
 
 Concurrency utilities for Python 3.7 + asyncio; the main portion is a component abstraction.
 To support this, some pipe implementations for inter-task, inter-thread, and inter-process communication
-and some serialization utilities are provided as well. Inter-process communication is based on ZeroMQ.
+and some serialization utilities are provided as well.
+Inter-process communication is based on ZeroMQ.
+Finally a class ``EventLoopThread`` is provided that can be used for bridging synchronous and asynchronous code.
 
 A "component" is code that is executing on its own, like an asyncio task, a thread, a worker thread's load, or a process.
 Components process commands issued by their owner, and create events to be handler by their owner.
