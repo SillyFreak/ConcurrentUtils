@@ -4,6 +4,9 @@ import sys
 import threading
 
 
+__all__ = ['EventLoopThread']
+
+
 class EventLoopThread(object):
     """\
     A dedicated thread running an event loop.
