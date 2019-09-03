@@ -12,11 +12,11 @@ __all__ = [
 class Serializer:
     @abstractmethod
     def serialize(self, value: Any) -> bytes:
-        raise NotImplemented
+        raise NotImplementedError
 
     @abstractmethod
     def deserialize(self, msg: bytes) -> Any:
-        raise NotImplemented
+        raise NotImplementedError
 
 
 try:  # pragma: nocover

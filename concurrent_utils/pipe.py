@@ -27,15 +27,15 @@ class PipeEnd:
 
     @abstractmethod
     def send_nowait(self, value: Any=_none, *, eof=False) -> None:
-        raise NotImplemented
+        raise NotImplementedError
 
     @abstractmethod
     async def send(self, value: Any=_none, *, eof=False) -> None:
-        raise NotImplemented
+        raise NotImplementedError
 
     @abstractmethod
     async def recv(self) -> Any:
-        raise NotImplemented
+        raise NotImplementedError
 
     async def request_sendnowait(self, value: Any) -> Any:
         self.send_nowait(value)
@@ -150,7 +150,7 @@ class ConcurrentPipeEnd(PipeEnd):
         return await asyncio.wrap_future(future)
 
     def send_nowait(self, value: Any=PipeEnd._none, *, eof=False) -> None:
-        raise NotImplemented
+        raise NotImplementedError
 
     async def send(self, value=PipeEnd._none, *, eof=False) -> None:
         await self._run(self._pipe_end.send(value, eof=eof))
@@ -284,7 +284,7 @@ else:
             return self._serializer.deserialize(msg)
 
         def send_nowait(self, value: Any = PipeEnd._none, *, eof=False) -> None:
-            raise NotImplemented
+            raise NotImplementedError
 
         async def send(self, value: Any=PipeEnd._none, *, eof=False) -> None:
             if self._eof_sent:
